@@ -6,16 +6,16 @@ import LineChart from './LineChart.vue'
 const world = useWorldStore()
 const pts = computed(() => world.history)
 const xs = computed(() => pts.value.map((p) => p.tick))
-// Couleur = entité (jamais le rang) : herbivores bleu, carnivores orange — validées par validate_palette.js (dark).
+// Colour = entity (never the rank): herbivores blue, carnivores orange — validated with validate_palette.js (dark).
 const HERB = 'var(--series-1)'
 const CARN = 'var(--series-2)'
-const YEAR = 7200 // ticks par an (12 × 600)
+const YEAR = 7200 // ticks per year (12 × 600)
 const when = (t: number) => (t < 600 ? `tick ${t}` : t < YEAR ? `jour ${(t / 600).toFixed(1)}` : `an ${(t / YEAR).toFixed(1)}`)
 const SERIES_POP = computed(() => [
   { name: 'Herbivores', color: HERB, values: pts.value.map((p) => p.herbivores) },
   { name: 'Carnivores', color: CARN, values: pts.value.map((p) => p.carnivores) },
 ])
-// indice d'intelligence 0-100 ; NaN = espèce absente (ligne interrompue)
+// intelligence index 0-100; NaN = species absent (line broken)
 const iq = (v: number | null | undefined) => (typeof v === 'number' ? v : NaN)
 const SERIES_IQ = computed(() => {
   const list = [{ name: 'Herbivores', color: HERB, values: pts.value.map((p) => iq(p.iqHerbivores)) }]

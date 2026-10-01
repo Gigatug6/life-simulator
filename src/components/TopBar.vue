@@ -9,7 +9,7 @@ const world = useWorldStore()
 const ui = useUiStore()
 const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
 const f = computed(() => world.frame)
-// intelligence du monde : celle des herbivores (espèce de base), à défaut des carnivores
+// world intelligence: that of the herbivores (base species), or the carnivores' if there are none
 const iq = computed(() => f.value?.iqHerbivores ?? f.value?.iqCarnivores ?? null)
 
 function onImport(e: Event) {

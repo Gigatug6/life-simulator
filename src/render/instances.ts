@@ -1,10 +1,10 @@
-/** Remplit les tampons d'instances (matrices 4×4 + couleurs) des créatures. Pur, testable. */
+/** Fills the creature instance buffers (4×4 matrices + colours). Pure, testable. */
 
-export const MAX_ENERGY = 100 // miroir de life::MAX_ENERGY
+export const MAX_ENERGY = 100 // mirror of life::MAX_ENERGY
 const HERB: [number, number, number] = [1.0, 0.82, 0.25]
 const CARN: [number, number, number] = [1.0, 0.2, 0.18]
 
-/** Taille en cellules : jamais plus petite que ~4 px à l'écran. */
+/** Size in cells: never smaller than ~4 px on screen. */
 export const creatureSize = (zoom: number) => Math.max(1.1, 4 / zoom)
 
 export function writeInstances(
@@ -20,7 +20,7 @@ export function writeInstances(
 ) {
   const s = creatureSize(zoom)
   for (let i = 0; i < n; i++) {
-    // l'axe y du monde pointe vers le bas : en scène, y et l'angle sont inversés
+    // the world y axis points down: in the scene, y and the angle are flipped
     const a = -angle[i]!
     const c = Math.cos(a) * s
     const sn = Math.sin(a) * s

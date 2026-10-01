@@ -4,9 +4,9 @@ import { terrainColor } from './terrainColor'
 import { writeInstances } from './instances'
 import type { Frame } from '../sim/protocol'
 
-const MAX_CREATURES = 20000 // miroir de creatures::MAX
+const MAX_CREATURES = 20000 // mirror of creatures::MAX
 
-/** Rendu 2D vue du ciel. Aucune dépendance à Vue : les données entrent par des méthodes. */
+/** Top-down 2D renderer. No dependency on Vue: data comes in through methods. */
 export class Renderer {
   readonly view = new ViewState()
   private renderer: THREE.WebGLRenderer
@@ -29,7 +29,7 @@ export class Renderer {
   private pinchDist = 0
   private cleanup: Array<() => void> = []
   private downAt: { x: number; y: number; t: number } | null = null
-  /** Appelé sur un clic (sans glisser) avec les coordonnées du monde en cellules. */
+  /** Called on a click (without dragging) with the world coordinates in cells. */
   onWorldClick: ((x: number, y: number) => void) | null = null
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -64,7 +64,7 @@ export class Renderer {
     loop()
   }
 
-  /** Définit le terrain (une fois par monde). */
+  /** Sets the terrain (once per world). */
   setTerrain(w: number, h: number, biome: Uint8Array) {
     this.disposeTerrain()
     this.w = w
@@ -82,7 +82,7 @@ export class Renderer {
     this.terrainTex.needsUpdate = true
     this.terrainMat = new THREE.MeshBasicMaterial({ map: this.terrainTex })
     this.terrainMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), this.terrainMat)
-    // cellule (0,0) en haut à gauche ; l'axe y du monde pointe vers le bas -> y scène = -y monde
+    // cell (0,0) at the top left; the world y axis points down -> scene y = -world y
     this.terrainMesh.position.set(w / 2, -h / 2, 0)
     this.scene.add(this.terrainMesh)
     this.view.resize(this.canvas.clientWidth || 800, this.canvas.clientHeight || 600)
@@ -90,7 +90,7 @@ export class Renderer {
     this.dirty = true
   }
 
-  /** Met à jour les couleurs avec l'herbe courante (w*h). */
+  /** Updates the colours with the current grass (w*h). */
   setGrass(grass: Float32Array) {
     if (!this.terrainTex || !this.biome || grass.length !== this.w * this.h) return
     const data = this.terrainTex.image.data as unknown as Uint8ClampedArray
@@ -99,13 +99,13 @@ export class Renderer {
     this.dirty = true
   }
 
-  /** Entoure d'un anneau la créature suivie (null = aucune). */
+  /** Draws a ring around the followed creature (null = none). */
   setSelection(pos: { x: number; y: number } | null) {
     this.ringPos = pos
     this.dirty = true
   }
 
-  /** Met à jour les créatures depuis une image de simulation. */
+  /** Updates the creatures from a simulation frame. */
   setCreatures(frame: Frame) {
     this.lastFrame = frame
     this.uploadCreatures()
@@ -124,7 +124,7 @@ export class Renderer {
     this.dirty = true
   }
 
-  /** Jour/nuit : assombrit le terrain (0 = nuit, 1 = plein jour). */
+  /** Day/night: darkens the terrain (0 = night, 1 = full day). */
   setDaylight(d: number) {
     this.terrainMat?.color.setScalar(0.4 + 0.6 * d)
     this.dirty = true
@@ -138,7 +138,7 @@ export class Renderer {
     this.dirty = true
   }
 
-  /** Capture un PNG (data URL) de l'image courante. */
+  /** Captures a PNG (data URL) of the current image. */
   snapshot(): string {
     this.draw()
     return this.canvas.toDataURL('image/png')

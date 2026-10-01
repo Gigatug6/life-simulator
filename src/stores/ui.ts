@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-/** Préférences d'affichage (panneaux ouverts/fermés), mémorisées dans le navigateur. */
+/** Display preferences (open/closed panels), remembered in the browser. */
 export const useUiStore = defineStore('ui', () => {
   const read = (k: string, d: boolean) => {
     try {
@@ -20,7 +20,7 @@ export const useUiStore = defineStore('ui', () => {
     try {
       localStorage.setItem('life-simulator:ui:charts', chartsOpen.value ? '1' : '0')
     } catch {
-      /* préférence non critique */
+      /* non-critical preference */
     }
   }
 

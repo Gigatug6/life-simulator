@@ -13,17 +13,17 @@ export const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: 'bless', label: 'Bénédiction', hint: 'Énergie et herbe au maximum dans le rayon' },
 ]
 
-/** Outils du mode « Dieu » : l'outil actif s'applique au clic sur le monde. */
+/** Tools of the "God" mode: the active tool applies on a click on the world. */
 export const useGodStore = defineStore('god', () => {
   const tool = ref<Tool>('observe')
-  const radius = ref(10) // cellules
+  const radius = ref(10) // cells
   const message = ref('')
 
   function apply(x: number, y: number, zoom = 4) {
     const world = useWorldStore()
     switch (tool.value) {
       case 'inspect':
-        // tolérance de 14 px à l'écran
+        // 14 px tolerance on screen
         message.value = world.pick(x, y, Math.max(1.5, 14 / zoom)) ? 'Créature sélectionnée' : 'Aucune créature ici'
         break
       case 'herbivore':
@@ -45,7 +45,7 @@ export const useGodStore = defineStore('god', () => {
     }
   }
 
-  /** Pluie (1), sécheresse (-1) ou retour à la normale (0). */
+  /** Rain (1), drought (-1) or back to normal (0). */
   function weather(v: number) {
     useWorldStore().rain(v)
     message.value = v > 0 ? 'Il pleut' : v < 0 ? 'Sécheresse' : 'Temps normal'

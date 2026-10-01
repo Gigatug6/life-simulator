@@ -6,7 +6,7 @@ import { createSaveStore, type SaveStore } from '../persist/store'
 import SimWorker from '../sim/worker?worker'
 import type { Frame, Inspected, FromWorker, Speed, ToWorker } from '../sim/protocol'
 
-/** État du monde côté UI. Les tableaux typés restent hors de la réactivité profonde. */
+/** World state on the UI side. Typed arrays stay out of deep reactivity. */
 export const useWorldStore = defineStore('world', () => {
   const status = ref('Chargement du moteur…')
   const ready = ref(false)
@@ -25,7 +25,7 @@ export const useWorldStore = defineStore('world', () => {
   const saveError = ref<string | null>(null)
   const persistent = ref(false)
   let worker: Worker | null = null
-  let startGen = 0 // numéro du dernier démarrage : un démarrage plus ancien encore en attente s'abandonne
+  let startGen = 0 // number of the latest start: an older start that is still pending gives up
   let saveStore: SaveStore | null = null
   let pendingExport = false
   let pendingImport = false
@@ -39,7 +39,7 @@ export const useWorldStore = defineStore('world', () => {
     if (document.visibilityState === 'hidden') save()
   }
 
-  /** Sauvegarde automatique : toutes les 10 s, plus espacée quand le monde est gros (≈ 2 s par Mo, max 60 s). */
+  /** Autosave: every 10 s, spaced out when the world is big (≈ 2 s per MB, max 60 s). */
   function scheduleAutosave() {
     if (autosave) clearTimeout(autosave)
     autosave = setTimeout(() => {
@@ -48,7 +48,7 @@ export const useWorldStore = defineStore('world', () => {
     }, autosaveMs)
   }
 
-  /** Demande un snapshot au worker ; l'écriture se fait ici (le thread principal survit à pagehide). */
+  /** Asks the worker for a snapshot; the write happens here (the main thread survives pagehide). */
   function save() {
     if (ready.value) send({ type: 'save' })
   }
@@ -78,8 +78,8 @@ export const useWorldStore = defineStore('world', () => {
     } catch (err) {
       saveError.value = `Lecture de la sauvegarde impossible : ${err}`
     }
-    if (gen !== startGen) return // un autre démarrage (ou un arrêt) a eu lieu pendant la lecture de la sauvegarde
-    // historique des courbes : repris pour le même monde, tronqué à l'instant de la sauvegarde
+    if (gen !== startGen) return // another start (or a stop) happened while the save was being read
+    // chart history: resumed for the same world, truncated at the save instant
     hist = snapshot ? loadHistory(worldSeed) : new History()
     hist.pruneAfter(savedTick)
     history.value = hist.points.slice()
@@ -116,7 +116,7 @@ export const useWorldStore = defineStore('world', () => {
         }
         saveHistory(m.meta.seed, hist)
         autosaveMs = Math.min(60_000, Math.max(10_000, (m.data.length / 1e6) * 2000))
-        if (writing) return // écriture précédente encore en cours : on n'empile pas
+        if (writing) return // previous write still in progress: do not pile up
         writing = true
         store
           ?.save(m.data, { savedAt: Date.now(), ...m.meta })
@@ -140,14 +140,14 @@ export const useWorldStore = defineStore('world', () => {
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 
-  /** Télécharge le monde courant dans un fichier .life (en plus de la sauvegarde navigateur). */
+  /** Downloads the current world as a .life file (in addition to the browser save). */
   function exportFile() {
     if (!ready.value) return
     pendingExport = true
     save()
   }
 
-  /** Remplace le monde par celui d'un fichier .life. */
+  /** Replaces the world with the one from a .life file. */
   async function importFile(file: File) {
     const data = new Uint8Array(await file.arrayBuffer())
     const info = snapshotInfo(data)
@@ -166,7 +166,7 @@ export const useWorldStore = defineStore('world', () => {
     await start()
   }
 
-  /** Efface la sauvegarde et repart d'un nouveau monde (graine aléatoire). */
+  /** Erases the save and starts over with a new world (random seed). */
   async function newWorld() {
     try {
       await (saveStore ?? createSaveStore()).clear()
@@ -180,7 +180,7 @@ export const useWorldStore = defineStore('world', () => {
   }
 
   function stop() {
-    startGen++ // annule un démarrage en attente
+    startGen++ // cancels a pending start
     if (autosave) clearTimeout(autosave)
     autosave = null
     document.removeEventListener('visibilitychange', onHidden)
@@ -191,7 +191,7 @@ export const useWorldStore = defineStore('world', () => {
     catchup.value = null
   }
 
-  /** Sélectionne la créature la plus proche de (x, y) dans `maxDist` cellules ; sinon désélectionne. */
+  /** Selects the creature nearest to (x, y) within `maxDist` cells; otherwise deselects. */
   function pick(x: number, y: number, maxDist: number) {
     const f = frame.value
     let best = -1
