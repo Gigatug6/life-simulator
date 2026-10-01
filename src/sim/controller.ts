@@ -1,5 +1,6 @@
 /** Pilote le moteur WASM (boucle, vitesse, images). Indépendant du Worker pour rester testable. */
 import { biomeView, creatureView, grassView, type LifeExports } from './engine'
+import { restoreSnapshot, takeSnapshot } from './snapshot'
 import type { Frame, Speed } from './protocol'
 
 export const GRASS_EVERY = 10 // une image sur N embarque l'herbe
@@ -16,6 +17,17 @@ export class SimController {
     e.world_populate(0, herbivores)
     e.world_populate(1, carnivores)
     this.frames = 0
+  }
+
+  /** Reprend une sauvegarde ; false (monde inchangé ou vide) si elle est invalide. */
+  restore(data: Uint8Array): boolean {
+    const ok = restoreSnapshot(this.engine, data)
+    if (ok) this.frames = 0
+    return ok
+  }
+
+  snapshot() {
+    return { data: takeSnapshot(this.engine), meta: { tick: this.engine.world_tick(), seed: this.engine.world_seed() } }
   }
 
   /** Copie des biomes (envoyée une fois à l'UI). */

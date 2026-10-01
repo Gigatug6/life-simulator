@@ -51,4 +51,17 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     for (let i = 0; i < GRASS_EVERY * 2; i++) if (sim.frame().grass) withGrass++
     expect(withGrass).toBe(2)
   })
+
+  it('snapshot puis restore reproduit le même monde (même ticks, mêmes créatures)', async () => {
+    const a = await make()
+    a.speed = 16
+    for (let i = 0; i < 5; i++) a.advance(1000)
+    const { data, meta } = a.snapshot()
+    expect(meta).toEqual({ tick: 80, seed: 5 })
+    const b = new SimController(await loadEngine(readFileSync(wasmPath)))
+    expect(b.restore(data)).toBe(true)
+    expect(b.frame().tick).toBe(80)
+    expect(b.frame().count).toBe(a.frame().count)
+    expect(b.restore(new Uint8Array(5))).toBe(false)
+  })
 })

@@ -22,6 +22,11 @@ const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
       </p>
       <p>Cerveau moyen : {{ world.frame.hiddenHerbivores.toFixed(2) }} neurones cachés · {{ Math.round(world.ticksPerSecond) }} ticks/s</p>
     </template>
+    <p v-if="world.saveError" class="err" data-testid="save-error">{{ world.saveError }}</p>
+    <p data-testid="saved">
+      {{ world.savedAt ? 'Sauvegardé à ' + new Date(world.savedAt).toLocaleTimeString('fr-FR') : world.persistent ? 'Sauvegarde automatique toutes les 10 s' : 'Sauvegarde indisponible (mémoire seulement)' }}
+      <button @click="world.save()">Sauvegarder</button>
+    </p>
     <div>
       <button v-for="s in SPEEDS" :key="s" :disabled="world.speed === s" @click="world.setSpeed(s)">
         {{ s === 0 ? 'Pause' : '×' + s }}
@@ -36,4 +41,5 @@ main.hud { position: fixed; top: 0; left: 0; padding: 1rem; background: rgba(7, 
 main.hud h1 { font-size: 1.1rem; margin: 0 0 .4rem; }
 main.hud p { margin: .15rem 0; }
 button { margin-right: .5rem; }
+.err { color: #ff8a80; }
 </style>

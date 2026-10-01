@@ -33,13 +33,17 @@ self.onmessage = async (e: MessageEvent<ToWorker>) => {
       const engine = await enginePromise
       if (timer) clearTimeout(timer)
       sim = new SimController(engine)
-      sim.init(msg.seed, msg.w, msg.h, msg.herbivores, msg.carnivores)
-      post({ type: 'ready', version: engine.version() })
+      const restored = !!msg.snapshot && sim.restore(msg.snapshot)
+      if (!restored) sim.init(msg.seed, msg.w, msg.h, msg.herbivores, msg.carnivores)
+      post({ type: 'ready', version: engine.version(), restored })
       const t = sim.terrain()
       post({ type: 'terrain', ...t }, [t.biome.buffer])
       loop()
     } else if (!sim) {
       return
+    } else if (msg.type === 'save') {
+      const snap = sim.snapshot()
+      post({ type: 'snapshot', ...snap }, [snap.data.buffer])
     } else if (msg.type === 'setSpeed') sim.speed = msg.speed
     else if (msg.type === 'spawn') sim.spawn(msg.x, msg.y, msg.species, msg.count)
     else if (msg.type === 'rain') sim.rain(msg.value)

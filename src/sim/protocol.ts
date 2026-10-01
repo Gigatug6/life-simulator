@@ -3,7 +3,17 @@ export const SPEEDS = [0, 1, 4, 16, 64] as const // ticks de simulation par imag
 export type Speed = (typeof SPEEDS)[number]
 
 export type ToWorker =
-  | { type: 'init'; seed: number; w: number; h: number; herbivores: number; carnivores: number }
+  | {
+      type: 'init'
+      seed: number
+      w: number
+      h: number
+      herbivores: number
+      carnivores: number
+      /** Sauvegarde à reprendre ; ignorée si invalide (nouveau monde créé à la place). */
+      snapshot?: Uint8Array
+    }
+  | { type: 'save' }
   | { type: 'setSpeed'; speed: Speed }
   | { type: 'spawn'; x: number; y: number; species: number; count: number }
   | { type: 'rain'; value: number }
@@ -28,7 +38,8 @@ export interface Frame {
 }
 
 export type FromWorker =
-  | { type: 'ready'; version: number }
+  | { type: 'ready'; version: number; restored: boolean }
+  | { type: 'snapshot'; data: Uint8Array; meta: { tick: number; seed: number } }
   | { type: 'terrain'; w: number; h: number; biome: Uint8Array }
   | { type: 'frame'; frame: Frame; ticksPerSecond: number }
   | { type: 'error'; message: string }
