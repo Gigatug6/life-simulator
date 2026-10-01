@@ -1,4 +1,4 @@
-/** État de la caméra 2D (pur, testable) : centre en cellules du monde, zoom en pixels par cellule. */
+/** 2D camera state (pure, testable): centre in world cells, zoom in pixels per cell. */
 export class ViewState {
   cx = 0
   cy = 0
@@ -18,21 +18,21 @@ export class ViewState {
     this.clamp()
   }
 
-  /** Cadre tout le monde. */
+  /** Frames the whole world. */
   fit() {
     this.cx = this.worldW / 2
     this.cy = this.worldH / 2
     this.zoom = Math.min(this.vw / this.worldW, this.vh / this.worldH) * 0.95
   }
 
-  /** Déplace la vue de (dx, dy) pixels écran (glisser). */
+  /** Moves the view by (dx, dy) screen pixels (drag). */
   panBy(dx: number, dy: number) {
     this.cx -= dx / this.zoom
     this.cy -= dy / this.zoom
     this.clamp()
   }
 
-  /** Zoome d'un facteur en gardant fixe le point sous (px, py) en pixels écran. */
+  /** Zooms by a factor while keeping the point under (px, py) in screen pixels fixed. */
   zoomAt(factor: number, px: number, py: number) {
     const before = this.screenToWorld(px, py)
     this.zoom = Math.min(this.maxZoom, Math.max(this.minZoom, this.zoom * factor))
@@ -46,7 +46,7 @@ export class ViewState {
     return { x: this.cx + (px - this.vw / 2) / this.zoom, y: this.cy + (py - this.vh / 2) / this.zoom }
   }
 
-  /** Garde le centre dans le monde. */
+  /** Keeps the centre inside the world. */
   clamp() {
     this.cx = Math.min(this.worldW, Math.max(0, this.cx))
     this.cy = Math.min(this.worldH, Math.max(0, this.cy))

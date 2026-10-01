@@ -1,5 +1,5 @@
-# Vérifie chaque Pull Request : tests du moteur Rust, types, tests unitaires, build.
-# (Les tests e2e tournent en local avec Docker : make e2e.)
+# Checks every Pull Request: Rust engine tests, types, unit tests, build.
+# (The e2e tests run locally with Docker: make e2e.)
 name: CI
 
 on:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Tester et compiler le moteur Rust
+      - name: Test and build the Rust engine
         run: |
           rustup target add wasm32-unknown-unknown
           cd wasm

@@ -1,9 +1,10 @@
-//! Dynamique des créatures : perception -> cerveau -> action -> métabolisme -> mort/reproduction.
+//! Creature dynamics: perception -> brain -> action -> metabolism -> death/reproduction.
 use crate::brain::{self, GENOME_LEN, IN, LEARN_LEN};
-use crate::creatures::{Creatures, CARNIVORE, HERBIVORE};
+use crate::creatures::{Creatures, CARNIVORE, HERBIVORE, MAX, MEM_LEN};
 use crate::elite::Elites;
 use crate::rng::Rng;
 use crate::spatial::SpatialHash;
+use crate::traits::{self, TRAIT_LEN};
 use crate::world::DEEP_WATER;
 
 pub const MAX_AGE: u32 = 2500;
@@ -11,22 +12,39 @@ pub const MAX_SPEED: f32 = 0.6;
 pub const START_ENERGY: f32 = 40.0;
 pub const MAX_ENERGY: f32 = 100.0;
 const BASE_COST: f32 = 0.04;
-const BRAIN_COST: f32 = 0.0008; // par unité cachée : l'intelligence a un prix
+const BRAIN_COST: f32 = 0.0008; // per hidden unit: intelligence has a price
+const SIGNAL_COST: f32 = 0.006; // emitting light costs energy (scaled by the signal strength)
+const DANGER_RADIUS: f32 = 8.0; // how far a herbivore senses carnivores
 const EAT_BITE: f32 = 0.25;
-const EAT_COST: f32 = 0.03; // tenter de manger coûte un peu : « manger toujours » n'est plus gratuit
-const EAT_GAIN: f32 = 12.0; // une bouchée = ~3 énergie ≈ 60 ticks de vie : il faut chercher à manger en continu
+const EAT_COST: f32 = 0.03; // trying to eat costs a little: "always eat" is no longer free
+const EAT_GAIN: f32 = 12.0; // one bite = ~3 energy ≈ 60 ticks of life: creatures must keep looking for food
 const BIRTH_THRESHOLD: f32 = 65.0;
 const BIRTH_COST: f32 = 35.0;
-const CHILD_ENERGY: f32 = 20.0; // < BIRTH_COST : naître coûte de l'énergie (pas de création gratuite)
-const MATURITY: u32 = 120; // âge minimal pour se reproduire
+const CHILD_ENERGY: f32 = 20.0; // < BIRTH_COST: being born costs energy (no free creation)
+const MATURITY: u32 = 120; // minimum age to reproduce
 const MUT_RATE: f32 = 0.08;
 const MUT_SIGMA: f32 = 0.15;
-const LOOK: f32 = 3.0; // distance des capteurs
+const LOOK: f32 = 3.0; // sensor distance
 const STRIKE_RANGE: f32 = 1.8;
-const KILL_GAIN: f32 = 0.6; // part de l'énergie de la proie récupérée
+const KILL_GAIN: f32 = 0.8; // share of the prey energy recovered // share of the prey's energy recovered
+const CARN_UPKEEP: f32 = 1.0; // a hunter burns this multiple of the base upkeep
+const CARN_BIRTH: f32 = 1.25; // hunters need this multiple of the birth threshold: slows predator booms
+const MEAT_BONUS: f32 = 10.0; // meat is dense food // meat is dense food: a flat amount per kill, growing with the prey's size squared
+// fatigue and sleep
+const FATIGUE_BASE: f32 = 0.0005; // tiredness gained per awake tick
+const FATIGUE_MOVE: f32 = 0.004; // extra tiredness per unit of distance walked
+const REST: f32 = 0.004; // tiredness lost per sleeping tick
+const SLEEP_FORCED: f32 = 0.85; // exhausted: falls asleep whenever it is safe and fed
+const SLEEP_NIGHT: f32 = 0.5; // moderately tired creatures also go to sleep at night
+const WAKE_FATIGUE: f32 = 0.05; // rested enough to wake up
+const NIGHT: f32 = 0.25; // daylight below this is night
+const HUNGER_WAKE: f32 = 0.12; // below this share of max energy a creature wakes up (and will not fall asleep)
+const SLEEP_METABOLISM: f32 = 0.5; // resting burns half the upkeep, with no movement/brain/light costs
+const TIRED_SLOWDOWN: f32 = 0.4; // an exhausted creature walks this much slower
+const BIG_PREY_RATIO: f32 = 1.3; // hunters cannot take down prey larger than this multiple of their own size
 const PI: f32 = 3.1415927;
 
-/// sin approché (pas de libm en no_std), précision ~1e-3.
+/// Approximate sin (no libm in no_std), accuracy ~1e-3.
 pub fn sin(x: f32) -> f32 {
     let two_pi = 2.0 * PI;
     let mut x = x - (x / two_pi) as i32 as f32 * two_pi;
@@ -65,7 +83,7 @@ impl Env<'_> {
             Some(cy * self.w + cx)
         }
     }
-    /// Cellule infranchissable : hors carte ou eau profonde.
+    /// Impassable cell: off the map or deep water.
     fn blocked(&self, x: f32, y: f32) -> bool {
         match self.cell(x, y) {
             None => true,
@@ -74,7 +92,7 @@ impl Env<'_> {
     }
 }
 
-/// Météorite : tue toute créature dans le rayon et brûle l'herbe. Renvoie le nombre de morts.
+/// Meteor: kills every creature in the radius and burns the grass. Returns the number of deaths.
 pub fn meteor(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     let r2 = r * r;
     let mut killed = 0;
@@ -89,14 +107,14 @@ pub fn meteor(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     killed
 }
 
-/// Bénédiction : énergie au maximum et herbe luxuriante dans le rayon. Renvoie le nombre de bénies.
+/// Blessing: maximum energy and lush grass in the radius. Returns the number of blessed creatures.
 pub fn bless(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     let r2 = r * r;
     let mut n = 0;
     for i in 0..c.count {
         let (dx, dy) = (c.x[i] - x, c.y[i] - y);
         if dx * dx + dy * dy <= r2 {
-            c.energy[i] = MAX_ENERGY;
+            c.energy[i] = MAX_ENERGY * c.traits[i * TRAIT_LEN + traits::SIZE];
             n += 1;
         }
     }
@@ -104,7 +122,7 @@ pub fn bless(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     n
 }
 
-/// Applique `f` à chaque cellule dont le centre est dans le disque (x, y, r).
+/// Applies `f` to every cell whose centre lies in the disc (x, y, r).
 fn for_cells<F: FnMut(&mut Env, usize)>(env: &mut Env, x: f32, y: f32, r: f32, mut f: F) {
     let x0 = (x - r).max(0.0) as usize;
     let y0 = (y - r).max(0.0) as usize;
@@ -120,12 +138,12 @@ fn for_cells<F: FnMut(&mut Env, usize)>(env: &mut Env, x: f32, y: f32, r: f32, m
     }
 }
 
-/// Nombre de créatures d'une espèce.
+/// Number of creatures of a species.
 pub fn count_species(c: &Creatures, species: u8) -> usize {
     (0..c.count).filter(|&i| c.species[i] == species).count()
 }
 
-/// Nombre moyen d'unités cachées d'une espèce (indice simple de complexité cérébrale).
+/// Mean number of hidden units of a species (simple brain-complexity index).
 pub fn mean_hidden(c: &Creatures, species: u8) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0u32);
     for i in 0..c.count {
@@ -137,7 +155,67 @@ pub fn mean_hidden(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
-/// Compétence moyenne (voir `brain::competence`) d'une espèce.
+/// Share of the active hidden neurons of a species that are of kind `kind` (see `brain::ACT_*`), 0..1.
+pub fn kind_share(c: &Creatures, species: u8, kind: usize) -> f32 {
+    let (mut hits, mut total) = (0u32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            let g = &c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN];
+            for h in 0..brain::hidden_count(g) {
+                total += 1;
+                if brain::activation_of(g, h) == kind {
+                    hits += 1;
+                }
+            }
+        }
+    }
+    if total == 0 { 0.0 } else { hits as f32 / total as f32 }
+}
+
+/// Mean absolute weight from the later-added inputs (danger, light, memory) into the active hidden
+/// neurons: how much evolution has wired the new senses in.
+pub fn new_sense_wiring(c: &Creatures, species: u8) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            let g = &c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN];
+            for h in 0..brain::hidden_count(g) {
+                for k in brain::FIRST_NEW_INPUT..IN {
+                    let w = g[brain::W1 + h * IN + k];
+                    sum += if w < 0.0 { -w } else { w };
+                    n += 1;
+                }
+            }
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
+/// Mean light signal (0..1) emitted by a species.
+pub fn mean_signal(c: &Creatures, species: u8) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            sum += c.signal[i];
+            n += 1;
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
+/// Mean value of physical trait `k` (see `traits.rs`) over a species; 0 if the species is absent.
+pub fn mean_trait(c: &Creatures, species: u8, k: usize) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            sum += c.traits[i * TRAIT_LEN + k];
+            n += 1;
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
+/// Mean competence (see `brain::competence`) of a species.
 pub fn mean_competence(c: &Creatures, species: u8) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0u32);
     for i in 0..c.count {
@@ -149,7 +227,7 @@ pub fn mean_competence(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
-/// Compétence moyenne du phénotype (génome + apprentissage de la vie) d'une espèce.
+/// Mean phenotype competence (genome + learning during life) of a species.
 pub fn mean_phenotype_competence(c: &Creatures, species: u8) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0u32);
     for i in 0..c.count {
@@ -161,13 +239,13 @@ pub fn mean_phenotype_competence(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
-const MIN_HERBIVORES: usize = 12; // en dessous, l'espèce renaît de ses meilleurs ancêtres
-const RESCUE_CHECK: u32 = 500; // une renaissance possible tous les 500 ticks au plus (sinon c'est une réserve de proies sans fin)
-const ELITE_CHECK: u32 = 250; // fréquence de mise à jour de la mémoire des élites (ticks)
+const MIN_HERBIVORES: usize = 12; // below this, the species is reborn from its best ancestors
+const RESCUE_CHECK: u32 = 500; // at most one rebirth every 500 ticks (otherwise it becomes an endless supply of prey)
+const ELITE_CHECK: u32 = 250; // how often the elite memory is updated (ticks)
 const ELITE_MIN_AGE: u32 = 300;
 
-/// Entretien périodique : mémorise le meilleur herbivore adulte, et repeuple si l'espèce s'éteint.
-/// Renvoie le nombre de naissances « par renaissance ».
+/// Periodic upkeep: remembers the best adult herbivore, and repopulates if the species dies out.
+/// Returns the number of "rebirth" births.
 pub fn maintain(c: &mut Creatures, elites: &mut Elites, env: &Env, rng: &mut Rng, tick: u32) -> u32 {
     if tick % ELITE_CHECK == 0 {
         let mut best: Option<(usize, f32)> = None;
@@ -204,9 +282,12 @@ pub fn maintain(c: &mut Creatures, elites: &mut Elites, env: &Env, rng: &mut Rng
             None => brain::random_genome(&mut genome, rng),
         }
         let ang = rng.next_f32() * 2.0 * PI;
-        if c.spawn(x, y, ang, START_ENERGY, HERBIVORE, 0, &genome).is_none() {
+        let Some(k) = c.spawn(x, y, ang, START_ENERGY, HERBIVORE, 0, &genome) else {
             break;
-        }
+        };
+        let mut founder = [0.0f32; TRAIT_LEN];
+        traits::random_founder(&mut founder, rng);
+        c.set_traits(k, &founder);
         born += 1;
     }
     if born > 0 {
@@ -215,26 +296,83 @@ pub fn maintain(c: &mut Creatures, elites: &mut Elites, env: &Env, rng: &mut Rng
     born
 }
 
-/// Avance d'un tick. `grid` est reconstruite ici.
-pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut Rng) {
+/// Neighbourhood grids, rebuilt every tick: one over all creatures, one over the carnivores only
+/// (so that herbivores can sense danger at a cost that does not grow with the herd).
+pub struct Grids {
+    pub all: SpatialHash,
+    pub pred: SpatialHash,
+    pred_x: [f32; MAX],
+    pred_y: [f32; MAX],
+}
+
+impl Grids {
+    pub const fn new() -> Self {
+        Grids { all: SpatialHash::new(), pred: SpatialHash::new(), pred_x: [0.0; MAX], pred_y: [0.0; MAX] }
+    }
+
+    fn rebuild(&mut self, c: &Creatures, w: usize, h: usize) {
+        self.all.build(&c.x, &c.y, c.count, w, h);
+        let mut k = 0;
+        for i in 0..c.count {
+            if c.species[i] == CARNIVORE {
+                self.pred_x[k] = c.x[i];
+                self.pred_y[k] = c.y[i];
+                k += 1;
+            }
+        }
+        self.pred.build(&self.pred_x, &self.pred_y, k, w, h);
+    }
+}
+
+/// Advances one tick. The grids are rebuilt here.
+pub fn step(c: &mut Creatures, grids: &mut Grids, env: &mut Env, rng: &mut Rng) {
     let n = c.count;
     if n == 0 {
         return;
     }
-    grid.build(&c.x, &c.y, n, env.w, env.h);
+    grids.rebuild(c, env.w, env.h);
+    let grid = &grids.all;
     for i in 0..n {
         let g = i * GENOME_LEN;
         let (x, y, a) = (c.x[i], c.y[i], c.angle[i]);
+        // physical traits of this creature (see traits.rs for the trade-offs)
+        let tr = i * TRAIT_LEN;
+        let (size, speed_gene, vision) = (c.traits[tr + traits::SIZE], c.traits[tr + traits::SPEED], c.traits[tr + traits::VISION]);
+        let look = LOOK * vision;
+        let max_energy = MAX_ENERGY * size; // a bigger body stores more
+        let is_carn = c.species[i] == CARNIVORE;
+        // carnivores close by (only herbivores have predators)
+        let danger_near = if is_carn { 0 } else { grids.pred.count_up_to(&grids.pred_x, &grids.pred_y, x, y, DANGER_RADIUS, 3) };
+
+        // --- sleep: only when safe and fed; a sleeper wakes up rested, hungry or when a predator comes near ---
+        let (tired, hungry) = (c.fatigue[i], c.energy[i] < HUNGER_WAKE * max_energy);
+        let sleeps = if c.asleep[i] != 0 {
+            tired > WAKE_FATIGUE && !hungry && danger_near == 0
+        } else {
+            !hungry && danger_near == 0 && (tired > SLEEP_FORCED || (tired > SLEEP_NIGHT && env.daylight < NIGHT))
+        };
+        c.asleep[i] = sleeps as u8;
+        if sleeps {
+            let base = if is_carn { BASE_COST * CARN_UPKEEP } else { BASE_COST };
+            c.fatigue[i] = (tired - REST).max(0.0);
+            c.signal[i] = 0.0;
+            c.energy[i] -= base * traits::upkeep(size) * SLEEP_METABOLISM;
+            c.age[i] += 1;
+            if c.age[i] > MAX_AGE {
+                c.energy[i] = 0.0;
+            }
+            continue;
+        }
 
         // --- perception ---
         let mut input = [0.0f32; IN];
-        // entrée 0 : herbe sous les pieds (le biais est déjà porté par chaque neurone)
+        // input 0: grass underfoot (the bias is already carried by each neuron)
         if let Some(cell) = env.cell(x, y) {
             input[0] = env.grass[cell];
         }
-        input[1] = c.energy[i] / MAX_ENERGY;
+        input[1] = c.energy[i] / max_energy;
         for (k, off) in [-0.6f32, 0.0, 0.6].iter().enumerate() {
-            let (sx, sy) = (x + cos(a + off) * LOOK, y + sin(a + off) * LOOK);
+            let (sx, sy) = (x + cos(a + off) * look, y + sin(a + off) * look);
             if c.species[i] == CARNIVORE {
                 let mut prey = 0u32;
                 grid.query(&c.x, &c.y, sx, sy, 4.0, |j, _| {
@@ -248,56 +386,80 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             }
             input[5 + k] = if env.blocked(sx, sy) { 1.0 } else { 0.0 };
         }
-        // voisins : on arrête de compter à 11 (soi-même + 10), l'entrée est de toute façon plafonnée à 1
-        let near = grid.count_up_to(&c.x, &c.y, x, y, 6.0, 11);
-        input[8] = (near.saturating_sub(1) as f32 / 10.0).min(1.0);
+        // neighbours (self + up to 10 others: the input is capped at 1 anyway) and the light they emit
+        let (mut near, mut light) = (0u32, 0.0f32);
+        grid.visit_up_to(&c.x, &c.y, x, y, 6.0, 11, |j| {
+            if j != i {
+                near += 1;
+                light += c.signal[j];
+            }
+        });
+        input[8] = (near as f32 / 10.0).min(1.0);
         input[9] = env.daylight;
+        // input 10: danger, i.e. carnivores close by (only herbivores have predators)
+        input[10] = danger_near as f32 / 3.0;
+        // input 11: mean light of the neighbours; inputs 12-13: memory (previous activation of hidden units 0, 1)
+        input[11] = if near > 0 { light / near as f32 } else { 0.0 };
+        let mi = i * MEM_LEN;
+        input[12] = c.memory[mi];
+        input[13] = c.memory[mi + 1];
 
-        // --- décision ---
+        // --- decision ---
         let l = i * LEARN_LEN;
         let (out, hid) = brain::forward_learn(&c.genome[g..g + GENOME_LEN], &c.learned[l..l + LEARN_LEN], &input);
-        let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED;
+        c.memory[mi] = hid[0];
+        c.memory[mi + 1] = hid[1];
+        c.signal[i] = (out[4] + 1.0) * 0.5; // light signal in 0..1
+        let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED * speed_gene * (1.0 - TIRED_SLOWDOWN * tired);
         let na = a + out[1] * 0.35;
         let (nx, ny) = (x + cos(na) * speed, y + sin(na) * speed);
         c.angle[i] = na;
         let mut moved = 0.0;
-        let mut reward = 0.0f32; // signal d'apprentissage de ce tick
+        let mut reward = 0.0f32; // learning signal for this tick
         if !env.blocked(nx, ny) {
             c.x[i] = nx;
             c.y[i] = ny;
             moved = speed;
         } else {
-            reward -= 0.2; // s'être cogné à l'eau / au bord
+            reward -= 0.2; // bumped into water / the edge
         }
 
-        // --- métabolisme ---
-        let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
-        let base = if c.species[i] == CARNIVORE { BASE_COST * 1.3 } else { BASE_COST };
-        c.energy[i] -= base + moved * moved * 0.12 + nh * BRAIN_COST;
+        c.fatigue[i] = (tired + FATIGUE_BASE + moved * FATIGUE_MOVE).min(1.0);
 
-        // --- manger (herbivores) ---
+        // --- metabolism ---
+        let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
+        let base = if c.species[i] == CARNIVORE { BASE_COST * CARN_UPKEEP } else { BASE_COST };
+        // upkeep grows with body size, long sight costs extra, and moving costs more for bigger / faster bodies
+        c.energy[i] -= base * traits::upkeep(size) + base * 0.1 * (vision - 1.0) + moved * moved * 0.12 * size + nh * BRAIN_COST + SIGNAL_COST * c.signal[i];
+
+        // --- eating (herbivores) ---
         if out[2] > 0.0 && c.species[i] == HERBIVORE {
             c.energy[i] -= EAT_COST;
             reward -= EAT_COST;
             if let Some(cell) = env.cell(c.x[i], c.y[i]) {
-                let bite = if env.grass[cell] < EAT_BITE { env.grass[cell] } else { EAT_BITE };
+                let max_bite = EAT_BITE * size * size; // bigger mouths take much bigger bites (feast vs famine trade-off)
+                let bite = if env.grass[cell] < max_bite { env.grass[cell] } else { max_bite };
                 env.grass[cell] -= bite;
-                c.energy[i] = (c.energy[i] + bite * EAT_GAIN).min(MAX_ENERGY);
+                c.energy[i] = (c.energy[i] + bite * EAT_GAIN).min(max_energy);
                 reward += bite * EAT_GAIN / 3.0;
             }
         }
 
-        // --- chasser (carnivores) : frappe la proie vivante la plus proche ---
+        // --- hunting (carnivores): strikes the nearest living prey ---
         if out[2] > 0.0 && c.species[i] == CARNIVORE {
             let mut best: Option<(usize, f32)> = None;
-            grid.query(&c.x, &c.y, c.x[i], c.y[i], STRIKE_RANGE, |j, d2| {
-                if c.species[j] == HERBIVORE && c.energy[j] > 0.0 && best.map_or(true, |(_, bd)| d2 < bd) {
+            grid.query(&c.x, &c.y, c.x[i], c.y[i], STRIKE_RANGE + 0.5 * (size - 1.0), |j, d2| {
+                // a prey much bigger than the hunter cannot be taken down (size is a defence)
+                let too_big = c.traits[j * TRAIT_LEN + traits::SIZE] > size * BIG_PREY_RATIO;
+                if c.species[j] == HERBIVORE && c.energy[j] > 0.0 && !too_big && best.map_or(true, |(_, bd)| d2 < bd) {
                     best = Some((j, d2));
                 }
             });
             if let Some((j, _)) = best {
-                c.energy[i] = (c.energy[i] + c.energy[j] * KILL_GAIN).min(MAX_ENERGY);
-                reward += (c.energy[j] * KILL_GAIN / 10.0).min(2.0);
+                let prey_size = c.traits[j * TRAIT_LEN + traits::SIZE];
+                let meat = c.energy[j] * KILL_GAIN + MEAT_BONUS * prey_size * prey_size;
+                c.energy[i] = (c.energy[i] + meat).min(max_energy);
+                reward += (meat / 10.0).min(2.0);
                 c.energy[j] = 0.0;
             }
         }
@@ -310,8 +472,8 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         }
 
         // --- reproduction ---
-        if out[3] > 0.0 && c.age[i] >= MATURITY && c.energy[i] > BIRTH_THRESHOLD && c.count < crate::creatures::MAX {
-            c.energy[i] -= BIRTH_COST;
+        if out[3] > 0.0 && c.age[i] >= MATURITY && c.energy[i] > BIRTH_THRESHOLD * size * if is_carn { CARN_BIRTH } else { 1.0 } && c.count < crate::creatures::MAX {
+            c.energy[i] -= BIRTH_COST * size;
             let mut child = [0.0f32; GENOME_LEN];
             brain::mutate(&mut child, &c.genome[g..g + GENOME_LEN], rng, MUT_RATE, MUT_SIGMA);
             brain::inherit(&mut child, &c.learned[l..l + LEARN_LEN]);
@@ -320,10 +482,14 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             let (cx, cy) = if env.blocked(cx, cy) { (c.x[i], c.y[i]) } else { (cx, cy) };
             let gen = c.generation[i].saturating_add(1);
             let sp = c.species[i];
-            c.spawn(cx, cy, ang, CHILD_ENERGY, sp, gen, &child);
+            let mut child_traits = [0.0f32; TRAIT_LEN];
+            traits::mutate(&mut child_traits, &c.traits[tr..tr + TRAIT_LEN], rng);
+            if let Some(k) = c.spawn(cx, cy, ang, CHILD_ENERGY * size, sp, gen, &child) {
+                c.set_traits(k, &child_traits);
+            }
         }
     }
-    // --- mort (parcours décroissant : le dernier échangé a déjà été traité) ---
+    // --- death (descending pass: the swapped-in last creature was already processed) ---
     for i in (0..n).rev() {
         if c.energy[i] <= 0.0 {
             c.kill(i);
@@ -347,7 +513,7 @@ mod tests {
 
     struct Sim {
         c: Box<Creatures>,
-        grid: Box<SpatialHash>,
+        grid: Box<Grids>,
         biome: Vec<u8>,
         grass: Vec<f32>,
         rng: Rng,
@@ -376,7 +542,7 @@ mod tests {
         }
         let mut elites = unsafe { Box::<Elites>::new_zeroed().assume_init() };
         elites.clear();
-        Sim { c, grid: Box::new(SpatialHash::new()), biome, grass, rng, elites }
+        Sim { c, grid: Box::new(Grids::new()), biome, grass, rng, elites }
     }
 
     fn run(s: &mut Sim, ticks: u32) {
@@ -393,12 +559,172 @@ mod tests {
     }
 
     #[test]
+    fn bigger_bodies_burn_more_and_far_sight_costs_extra() {
+        // identical blank brains, no food at all: only the body plan differs
+        let mut s = sim(6, 0);
+        s.grass.iter_mut().for_each(|g| *g = 0.0);
+        // uniform land, so that every creature moves exactly the same way (no path-dependent noise)
+        s.biome.iter_mut().for_each(|b| *b = world::PLAIN);
+        let blank = [0.0f32; GENOME_LEN];
+        let plans: [[f32; TRAIT_LEN]; 4] = [
+            [1.0, 1.0, 1.0, 0.5], // reference
+            [1.6, 1.0, 1.0, 0.5], // big
+            [0.6, 1.0, 1.0, 0.5], // small
+            [1.0, 1.0, 1.8, 0.5], // far sight
+        ];
+        for (k, p) in plans.iter().enumerate() {
+            let i = s.c.spawn(20.0 + 15.0 * k as f32, 60.0, 0.0, 40.0, HERBIVORE, 0, &blank).unwrap();
+            s.c.set_traits(i, p);
+        }
+        let ids: Vec<u32> = (0..4).map(|i| s.c.id[i]).collect();
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        for _ in 0..100 {
+            step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        }
+        let energy = |id: u32| (0..s.c.count).find(|&i| s.c.id[i] == id).map(|i| s.c.energy[i]).unwrap();
+        let (reference, big, small, sighted) = (energy(ids[0]), energy(ids[1]), energy(ids[2]), energy(ids[3]));
+        assert!(big < reference, "a bigger body must burn more: {} vs {}", big, reference);
+        assert!(small > reference, "a smaller body must burn less: {} vs {}", small, reference);
+        assert!(sighted < reference, "far sight must cost extra: {} vs {}", sighted, reference);
+    }
+
+    /// A genome with one hidden unit (tanh) wired `input -> hidden 0 -> output`, nothing else.
+    fn wired(input: usize, output: usize, w_in: f32, w_out: f32) -> [f32; GENOME_LEN] {
+        let mut g = [0.0f32; GENOME_LEN];
+        g[brain::HID_GENE] = 4.0;
+        g[brain::W1 + input] = w_in; // hidden unit 0, this input
+        g[brain::W2 + output * brain::HID_MAX] = w_out; // this output, hidden unit 0
+        g
+    }
+
+    fn plain_world() -> Sim {
+        let mut s = sim(12, 0);
+        s.biome.iter_mut().for_each(|b| *b = world::PLAIN);
+        s.grass.iter_mut().for_each(|g| *g = 0.0);
+        s
+    }
+
+    #[test]
+    fn the_danger_sense_makes_herbivores_react_to_nearby_carnivores() {
+        // brain: danger -> hidden 0 -> advance. Two identical herbivores, one near a carnivore.
+        let mut s = plain_world();
+        let g = wired(10, 0, 5.0, 5.0);
+        let a = s.c.spawn(30.0, 30.0, 0.0, 40.0, HERBIVORE, 0, &g).unwrap();
+        let b = s.c.spawn(90.0, 90.0, 0.0, 40.0, HERBIVORE, 0, &g).unwrap();
+        s.c.spawn(34.0, 30.0, 0.0, 40.0, CARNIVORE, 0, &[0.0; GENOME_LEN]).unwrap(); // 4 cells from A
+        let (ax, bx) = (s.c.x[a], s.c.x[b]);
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        let moved = |i: usize, x0: f32| (s.c.x[i] - x0).abs();
+        assert!(moved(a, ax) > moved(b, bx) + 0.1, "the herbivore near a carnivore speeds up: {} vs {}", moved(a, ax), moved(b, bx));
+    }
+
+    #[test]
+    fn the_memory_cells_carry_the_previous_hidden_activation() {
+        // a constant hidden unit 0 (bias only): after one step its activation sits in the memory cell
+        let mut s = plain_world();
+        let mut g = [0.0f32; GENOME_LEN];
+        g[brain::HID_GENE] = 4.0;
+        g[brain::B1] = 1.0; // hidden 0 = tanh(1.0) ≈ 0.76
+        let a = s.c.spawn(50.0, 50.0, 0.0, 40.0, HERBIVORE, 0, &g).unwrap();
+        assert_eq!(s.c.memory[a * MEM_LEN], 0.0);
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        let m = s.c.memory[a * MEM_LEN];
+        assert!((m - brain::tanh(1.0)).abs() < 1e-5, "memory {}", m);
+        // ... and it comes back as an input. Hidden 1 is constant (bias only, so memory cell 2 = 0.76 from
+        // tick 2 on); hidden 0 reads ONLY memory cell 2 (input 13) and drives the advance output.
+        let mut reader = wired(13, 0, 5.0, 5.0);
+        reader[brain::B1 + 1] = 1.0;
+        let r = s.c.spawn(10.0, 90.0, 0.0, 40.0, HERBIVORE, 0, &reader).unwrap();
+        let first = s.c.x[r];
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        let slow = (s.c.x[r] - first).abs(); // memory cell 2 was still 0 on this tick: half speed
+        let first = s.c.x[r];
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        let fast = (s.c.x[r] - first).abs(); // now the memory feeds the advance output: full speed
+        assert!(fast > slow + 0.05, "memory must change the next tick: {} then {}", slow, fast);
+    }
+
+    #[test]
+    fn creatures_see_the_light_of_their_neighbours() {
+        // A always shines (output 4 saturated). B glows only in response to neighbouring light.
+        let mut s = plain_world();
+        let mut shiner = [0.0f32; GENOME_LEN];
+        shiner[brain::HID_GENE] = 4.0;
+        shiner[brain::B2 + 4] = 8.0;
+        let mut follower = wired(11, 4, 5.0, 5.0);
+        follower[brain::B2 + 4] = -2.0; // dark unless it sees light
+        s.c.spawn(60.0, 60.0, 0.0, 40.0, HERBIVORE, 0, &shiner).unwrap();
+        let near = s.c.spawn(62.0, 60.0, 0.0, 40.0, HERBIVORE, 0, &follower).unwrap();
+        let far = s.c.spawn(10.0, 10.0, 0.0, 40.0, HERBIVORE, 0, &follower).unwrap();
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        assert!(s.c.signal[0] > 0.95, "the shiner glows: {}", s.c.signal[0]);
+        assert!(s.c.signal[near] > s.c.signal[far] + 0.3, "a neighbour of the light lights up: {} vs {}", s.c.signal[near], s.c.signal[far]);
+        assert!(s.c.signal[far] < 0.2, "nothing to react to: {}", s.c.signal[far]);
+    }
+
+    #[test]
+    fn a_much_bigger_prey_cannot_be_taken_down() {
+        let mut s = sim(4, 0);
+        for cell in s.biome.iter_mut() {
+            *cell = world::PLAIN;
+        }
+        let blank = [0.0f32; GENOME_LEN];
+        let mut hunter = blank;
+        hunter[brain::HID_GENE] = 4.0; // hidden units
+        hunter[brain::B2 + 2] = 5.0; // always attack
+        let h = s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &hunter).unwrap();
+        s.c.set_traits(h, &[1.0, 1.0, 1.0, 0.5]);
+        let giant = s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &blank).unwrap();
+        s.c.set_traits(giant, &[1.6, 1.0, 1.0, 0.5]); // 1.6 > 1.3 × 1.0
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        assert_eq!(count_species(&s.c, HERBIVORE), 1, "the giant survives the strike");
+        // a normal-sized prey in the same spot is taken down
+        let normal = s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &blank).unwrap();
+        s.c.set_traits(normal, &[1.2, 1.0, 1.0, 0.5]); // 1.2 <= 1.3
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        assert_eq!(count_species(&s.c, HERBIVORE), 1, "one of the two prey is gone (the normal one)");
+        assert!((0..s.c.count).any(|i| s.c.species[i] == HERBIVORE && s.c.traits[i * TRAIT_LEN + traits::SIZE] > 1.5));
+    }
+
+    #[test]
+    fn newborns_inherit_the_parents_body_plan_with_small_mutations() {
+        let mut s = sim(7, 0);
+        // a parent whose brain always wants to reproduce (output 3 bias strongly positive) and is rich
+        let mut g = [0.0f32; GENOME_LEN];
+        g[brain::HID_GENE] = 4.0; // hidden units
+        g[brain::B2 + 3] = 6.0; // output 3 (reproduce) strongly positive
+        let p = s.c.spawn(60.0, 60.0, 0.0, 95.0, HERBIVORE, 0, &g).unwrap();
+        s.c.set_traits(p, &[1.3, 0.8, 1.5, 0.2]);
+        s.c.age[p] = 500;
+        for cell in s.biome.iter_mut() {
+            *cell = world::PLAIN;
+        }
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        assert_eq!(s.c.count, 2, "the parent must have given birth");
+        let c = 1;
+        assert_eq!(s.c.generation[c], 1);
+        let t = &s.c.traits[c * TRAIT_LEN..(c + 1) * TRAIT_LEN];
+        assert!((t[traits::SIZE] - 1.3).abs() < 0.3 && (t[traits::SPEED] - 0.8).abs() < 0.3 && (t[traits::VISION] - 1.5).abs() < 0.4);
+        assert!((t[traits::HUE] - 0.2).abs() < 0.2, "lineage hue stays close: {}", t[traits::HUE]);
+        // the child's starting energy scales with the parent's size
+        assert!((s.c.energy[c] - CHILD_ENERGY * 1.3).abs() < 1e-3, "{}", s.c.energy[c]);
+    }
+
+    #[test]
     fn extinct_species_is_reborn_from_its_best_ancestors() {
         let mut s = sim(3, 300);
-        run(&mut s, 1500); // la mémoire des élites se remplit
+        run(&mut s, 1500); // the elite memory fills up
         assert!(s.elites.count > 0);
         let best = (0..s.elites.count).map(|k| s.elites.score[k]).fold(0.0f32, f32::max);
-        // cataclysme : plus aucune créature
+        // cataclysm: no creature left
         for i in (0..s.c.count).rev() {
             s.c.kill(i);
         }
@@ -408,10 +734,10 @@ mod tests {
         assert_eq!(born as usize, MIN_HERBIVORES);
         assert_eq!(s.c.count, MIN_HERBIVORES);
         assert_eq!(s.elites.rescues, 1);
-        // les renaissants descendent des élites : bien meilleurs que le hasard
+        // the reborn descend from the elites: far better than random
         let comp = mean_competence(&s.c, HERBIVORE);
-        assert!(comp > best - 0.15, "renaissance {} vs meilleure élite {}", comp, best);
-        // pas de renaissance si la population est suffisante
+        assert!(comp > best - 0.15, "rebirth {} vs best elite {}", comp, best);
+        // no rebirth if the population is large enough
         let env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
         assert_eq!(maintain(&mut s.c, &mut s.elites, &env, &mut s.rng, 1000), 0);
     }
@@ -458,14 +784,14 @@ mod tests {
         let n = a.c.count;
         assert!(n <= crate::creatures::MAX);
         for i in 0..n {
-            assert!(a.c.energy[i].is_finite() && a.c.energy[i] > 0.0 && a.c.energy[i] <= MAX_ENERGY + 1.0);
+            assert!(a.c.energy[i].is_finite() && a.c.energy[i] > 0.0 && a.c.energy[i] <= MAX_ENERGY * traits::RANGE[traits::SIZE].1 + 1.0);
             assert!(a.c.x[i] >= 0.0 && a.c.x[i] < W as f32 && a.c.y[i] >= 0.0 && a.c.y[i] < H as f32);
             assert!(a.biome[a.c.y[i] as usize * W + a.c.x[i] as usize] != DEEP_WATER);
         }
         let mut ids = a.c.id[..n].to_vec();
         ids.sort();
         ids.dedup();
-        assert_eq!(ids.len(), n, "ids uniques");
+        assert_eq!(ids.len(), n, "unique ids");
     }
 
     fn add_carnivores(s: &mut Sim, n: usize) {
@@ -494,26 +820,106 @@ mod tests {
             max = max.max(s.c.count);
         }
         assert!(min > 0, "extinction");
-        assert!(max < 2500, "boom démographique : {}", max);
+        assert!(max < 2500, "population boom: {}", max);
     }
 
     #[test]
     fn carnivores_kill_and_gain_energy() {
         let mut s = sim(4, 0);
         let g = [0.0; GENOME_LEN];
-        // un prédateur au cerveau forcé « manger/attaquer » (biais de sortie 2 positif) à côté d'une proie
+        // a predator with a forced "eat/attack" brain (positive output-2 bias) next to a prey
         let mut gp = g;
-        gp[brain::GENOME_LEN - 1] = 4.0;
-        let b2 = brain::GENOME_LEN - 1 - brain::OUT; // début de b2
-        gp[b2 + 2] = 5.0;
+        gp[brain::HID_GENE] = 4.0;
+        gp[brain::B2 + 2] = 5.0;
         s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &gp);
         s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &g);
         for cell in s.biome.iter_mut() {
             *cell = world::PLAIN;
         }
         run(&mut s, 1);
-        assert_eq!(count_species(&s.c, HERBIVORE), 0, "la proie est tuée");
-        assert!(s.c.energy[0] > 40.0, "le prédateur gagne de l'énergie : {}", s.c.energy[0]);
+        assert_eq!(count_species(&s.c, HERBIVORE), 0, "the prey is killed");
+        assert!(s.c.energy[0] > 40.0, "the predator gains energy: {}", s.c.energy[0]);
+    }
+
+    fn step_at(s: &mut Sim, daylight: f32) {
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+    }
+
+    /// A genome that always wants to advance at full speed (output-0 bias).
+    fn runner() -> [f32; GENOME_LEN] {
+        let mut g = [0.0f32; GENOME_LEN];
+        g[brain::HID_GENE] = 4.0;
+        g[brain::B2] = 5.0;
+        g
+    }
+
+    #[test]
+    fn a_tired_creature_sleeps_at_night_then_wakes_up_rested() {
+        let mut s = plain_world();
+        let a = s.c.spawn(60.0, 60.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        let b = s.c.spawn(80.0, 80.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        s.c.fatigue[a] = 0.9;
+        s.c.fatigue[b] = 0.1; // not tired: keeps walking
+        let (ax, bx) = (s.c.x[a], s.c.x[b]);
+        step_at(&mut s, 0.1); // night
+        assert_eq!((s.c.asleep[a], s.c.asleep[b]), (1, 0));
+        assert_eq!(s.c.x[a], ax, "a sleeper does not move");
+        assert!(s.c.x[b] != bx, "an awake creature does");
+        assert!(s.c.fatigue[a] < 0.9, "sleeping rests");
+        // it sleeps until rested, whatever the light, then wakes up
+        for _ in 0..260 {
+            step_at(&mut s, 0.9);
+        }
+        let i = (0..s.c.count).find(|&k| s.c.id[k] == 1).unwrap();
+        assert_eq!(s.c.asleep[i], 0, "rested creatures wake up");
+        assert!(s.c.fatigue[i] < 0.2);
+    }
+
+    #[test]
+    fn walking_tires_and_a_sleeper_burns_less_energy() {
+        let mut s = plain_world();
+        let a = s.c.spawn(60.0, 60.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        for _ in 0..200 {
+            step_at(&mut s, 0.9);
+        }
+        assert!(s.c.fatigue[a] > 0.1, "walking builds up fatigue: {}", s.c.fatigue[a]);
+        // same body, awake vs asleep
+        let mut s = plain_world();
+        let awake = s.c.spawn(30.0, 30.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        let asleep = s.c.spawn(90.0, 90.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        s.c.fatigue[asleep] = 0.9;
+        step_at(&mut s, 0.1);
+        step_at(&mut s, 0.1);
+        let lost = |s: &Sim, i: usize| 80.0 - s.c.energy[i];
+        assert!(lost(&s, asleep) < lost(&s, awake) * 0.6, "sleep saves energy: {} vs {}", lost(&s, asleep), lost(&s, awake));
+    }
+
+    #[test]
+    fn hunger_and_predators_keep_a_tired_creature_awake() {
+        let mut s = plain_world();
+        let hungry = s.c.spawn(30.0, 30.0, 0.0, 5.0, HERBIVORE, 0, &runner()).unwrap();
+        let hunted = s.c.spawn(90.0, 90.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        s.c.spawn(94.0, 90.0, 0.0, 80.0, CARNIVORE, 0, &[0.0; GENOME_LEN]);
+        s.c.fatigue[hungry] = 0.95;
+        s.c.fatigue[hunted] = 0.95;
+        step_at(&mut s, 0.1);
+        assert_eq!(s.c.asleep[hungry], 0, "too hungry to sleep");
+        assert_eq!(s.c.asleep[hunted], 0, "too dangerous to sleep");
+    }
+
+    #[test]
+    fn meat_is_dense_food() {
+        let mut s = plain_world();
+        let mut gp = [0.0; GENOME_LEN];
+        gp[brain::HID_GENE] = 4.0;
+        gp[brain::B2 + 2] = 5.0;
+        s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &gp);
+        s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &[0.0; GENOME_LEN]);
+        step_at(&mut s, 0.9);
+        // one kill: most of the prey's energy plus a flat bonus, i.e. far more than any single bite of grass
+        assert!(s.c.energy[0] > 30.0 + 0.8 * 40.0, "one kill is a feast: {}", s.c.energy[0]);
+        assert!(s.c.energy[0] - 30.0 > 5.0 * EAT_BITE * EAT_GAIN);
     }
 
     #[test]
@@ -522,31 +928,73 @@ mod tests {
         add_carnivores(&mut s, 8);
         let start = mean_competence(&s.c, HERBIVORE);
         run(&mut s, 8000);
-        assert!(count_species(&s.c, HERBIVORE) > 0, "les herbivores ont disparu");
+        assert!(count_species(&s.c, HERBIVORE) > 0, "the herbivores disappeared");
         let end = mean_competence(&s.c, HERBIVORE);
-        assert!((start - 0.5).abs() < 0.1, "départ aléatoire : {}", start);
-        assert!(end > 0.58, "l'intelligence doit avoir progressé : {} -> {}", start, end);
+        assert!((start - 0.5).abs() < 0.1, "random start: {}", start);
+        assert!(end > 0.58, "intelligence must have progressed: {} -> {}", start, end);
         assert!(s.c.count < crate::creatures::MAX / 4);
     }
 
     #[test]
-    #[ignore] // performance : cargo test perf_report -- --ignored --nocapture
+    #[ignore] // performance: cargo test perf_report -- --ignored --nocapture
     fn perf_report() {
         for n in [2_000usize, 5_000, 10_000, 20_000] {
             let mut s = sim(9, n);
-            // la population évolue : on mesure sur 200 ticks juste après le peuplement
+            // the population evolves: measured over 200 ticks right after populating
             let t0 = std::time::Instant::now();
             run_from(&mut s, 0, 200);
             let dt = t0.elapsed().as_secs_f64();
             println!(
-                "perf n0={:6} n_fin={:6} -> {:7.0} ticks/s ({:.2} ms/tick, {:.2} us/créature/tick) [natif, opt 3]",
+                "perf n0={:6} n_end={:6} -> {:7.0} ticks/s ({:.2} ms/tick, {:.2} us/creature/tick) [native, opt 3]",
                 n, s.c.count, 200.0 / dt, dt * 1000.0 / 200.0, dt * 1e6 / 200.0 / s.c.count as f64
             );
         }
     }
 
     #[test]
-    #[ignore] // diagnostic : cargo test intelligence_report -- --ignored --nocapture
+    #[ignore] // diagnostic: cargo test traits_report -- --ignored --nocapture   (env: CARN, TICKS, SEED)
+    fn traits_report() {
+        let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        let ticks: u32 = std::env::var("TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(40_000);
+        let seed: u64 = std::env::var("SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+        let mut s = sim(seed, 300);
+        add_carnivores(&mut s, nc);
+        let step_len = ticks / 20;
+        for chunk in 0..20 {
+            run_from(&mut s, chunk * step_len, step_len);
+            let n = s.c.count;
+            // spread (standard deviation) of the size trait among herbivores: is there still variety?
+            let mean = mean_trait(&s.c, HERBIVORE, traits::SIZE);
+            let mut var = 0.0f32;
+            let mut k = 0u32;
+            for i in 0..n {
+                if s.c.species[i] == HERBIVORE {
+                    var += (s.c.traits[i * TRAIT_LEN + traits::SIZE] - mean).powi(2);
+                    k += 1;
+                }
+            }
+            println!(
+                "t={:6} herb={:5} carn={:3} size={:.3}±{:.3} speed={:.3} vision={:.3} comp={:.3} kinds[tanh bump step wave]=[{:.2} {:.2} {:.2} {:.2}] wiring={:.3} light={:.2}",
+                (chunk + 1) * step_len,
+                count_species(&s.c, HERBIVORE),
+                count_species(&s.c, CARNIVORE),
+                mean,
+                if k > 0 { (var / k as f32).sqrt() } else { 0.0 },
+                mean_trait(&s.c, HERBIVORE, traits::SPEED),
+                mean_trait(&s.c, HERBIVORE, traits::VISION),
+                mean_competence(&s.c, HERBIVORE),
+                kind_share(&s.c, HERBIVORE, brain::ACT_TANH),
+                kind_share(&s.c, HERBIVORE, brain::ACT_BUMP),
+                kind_share(&s.c, HERBIVORE, brain::ACT_STEP),
+                kind_share(&s.c, HERBIVORE, brain::ACT_WAVE),
+                new_sense_wiring(&s.c, HERBIVORE),
+                mean_signal(&s.c, HERBIVORE)
+            );
+        }
+    }
+
+    #[test]
+    #[ignore] // diagnostic: cargo test intelligence_report -- --ignored --nocapture
     fn intelligence_report() {
         let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
         let ticks: u32 = std::env::var("TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(20_000);
@@ -556,7 +1004,7 @@ mod tests {
         for chunk in 0..20 {
             run_from(&mut s, chunk * step, step);
             let n = s.c.count;
-            // âge moyen des vieux : compétence des créatures de plus de 1000 ticks vs ensemble
+            // old creatures: competence of creatures older than 1000 ticks vs everyone
             let (mut old, mut oldn) = (0.0f32, 0u32);
             for i in 0..n {
                 if s.c.age[i] > 1000 {
@@ -566,7 +1014,7 @@ mod tests {
             }
             let maxgen = (0..n).map(|i| s.c.generation[i]).max().unwrap_or(0);
             println!(
-                "t={:6} herb={:5} carn={:4} hid={:.2} comp_h={:.3} phen_h={:.3} comp_c={:.3} comp_vieux={:.3} gen_max={}",
+                "t={:6} herb={:5} carn={:4} hid={:.2} comp_h={:.3} phen_h={:.3} comp_c={:.3} comp_old={:.3} gen_max={}",
                 (chunk + 1) * step,
                 count_species(&s.c, HERBIVORE),
                 count_species(&s.c, CARNIVORE),
@@ -581,12 +1029,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // rapport d'équilibrage : cargo test balance_report -- --ignored --nocapture
+    #[ignore] // balance report: cargo test balance_report -- --ignored --nocapture
     fn balance_report() {
         let mut s = sim(3, 300);
         let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
         add_carnivores(&mut s, nc);
-        for chunk in 0..12 {
+        let chunks: u32 = std::env::var("CHUNKS").ok().and_then(|v| v.parse().ok()).unwrap_or(12);
+        for chunk in 0..chunks {
             run_from(&mut s, chunk * 500, 500);
             println!(
                 "t={:5} herb={:5} carn={:4} hid_h={:.2} hid_c={:.2}",
@@ -605,7 +1054,7 @@ mod tests {
         let before: f32 = s.grass.iter().sum();
         run(&mut s, 50);
         assert!(s.grass.iter().sum::<f32>() < before + 5.0 || s.c.count > 0);
-        // sans herbe du tout : extinction (le métabolisme tue)
+        // no grass at all: extinction (metabolism kills)
         let mut s = sim(8, 100);
         s.grass.iter_mut().for_each(|g| *g = 0.0);
         for _ in 0..1500 {

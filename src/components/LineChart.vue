@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 
 export interface ChartSeries {
   name: string
-  color: string // variable CSS (ex. var(--series-1))
+  color: string // CSS variable (e.g. var(--series-1))
   values: number[]
 }
 
@@ -11,7 +11,7 @@ const props = defineProps<{
   title: string
   xs: number[]
   series: ChartSeries[]
-  /** Domaine y fixe ; sinon [0, max]. */
+  /** Fixed y domain; otherwise [0, max]. */
   domain?: [number, number]
   format?: (v: number) => string
   xFormat?: (x: number) => string
@@ -47,13 +47,13 @@ const yTicks = computed(() => {
 const paths = computed(() =>
   props.series.map((s) => ({
     ...s,
-    // les valeurs absentes (NaN : espèce disparue) interrompent la ligne
+    // missing values (NaN: species gone) break the line
     d: s.values.map((v, i) => (Number.isFinite(v) ? `${i > 0 && Number.isFinite(s.values[i - 1]!) ? 'L' : 'M'}${sx(props.xs[i]!).toFixed(1)},${sy(v).toFixed(1)}` : '')).join(''),
     last: s.values.length && Number.isFinite(s.values[s.values.length - 1]!) ? { x: sx(props.xs[props.xs.length - 1]!), y: sy(s.values[s.values.length - 1]!), v: s.values[s.values.length - 1]! } : null,
   })),
 )
 
-// survol : réticule + infobulle sur l'échantillon le plus proche
+// hover: crosshair + tooltip on the nearest sample
 const hover = ref<number | null>(null)
 function onMove(e: PointerEvent) {
   const svg = e.currentTarget as SVGSVGElement

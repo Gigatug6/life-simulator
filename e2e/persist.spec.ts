@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test'
 
-test('IndexedDB : sauvegarde, rechargement et effacement réels', async ({ page }) => {
+test('IndexedDB: real save, reload and erase', async ({ page }) => {
   await page.goto('/')
   const result = await page.evaluate(async () => {
-    // import dynamique via le serveur de dev (chemin en variable : pas de résolution TypeScript)
+    // dynamic import through the dev server (path in a variable: no TypeScript resolution)
     const path = '/src/persist/store.ts'
     const { createSaveStore } = (await import(/* @vite-ignore */ path)) as typeof import('../src/persist/store')
     const store = createSaveStore()

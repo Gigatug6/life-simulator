@@ -1,4 +1,4 @@
-//! Mémoire des meilleurs génomes : l'espèce peut renaître de ses ancêtres les plus compétents.
+//! Memory of the best genomes: the species can be reborn from its most competent ancestors.
 use crate::brain::GENOME_LEN;
 use crate::rng::Rng;
 
@@ -21,7 +21,7 @@ impl Elites {
         self.rescues = 0;
     }
 
-    /// Propose un génome ; il entre s'il y a de la place ou s'il bat le moins bon. Renvoie vrai si retenu.
+    /// Offers a genome; it enters if there is room or if it beats the worst one. Returns true if kept.
     pub fn consider(&mut self, genome: &[f32], score: f32) -> bool {
         let slot = if self.count < ELITES {
             self.count += 1;
@@ -43,7 +43,7 @@ impl Elites {
         true
     }
 
-    /// Génome d'une élite tirée au hasard (None si aucune).
+    /// Genome of a randomly drawn elite (None if there is none).
     pub fn pick(&self, rng: &mut Rng) -> Option<&[f32]> {
         if self.count == 0 {
             return None;
@@ -71,8 +71,8 @@ mod tests {
             assert!(e.consider(&g(k as f32), 0.5 + k as f32 * 0.01));
         }
         assert_eq!(e.count, ELITES);
-        assert!(!e.consider(&g(99.0), 0.4)); // moins bon que tous
-        assert!(e.consider(&g(100.0), 0.9)); // remplace le pire (score 0.5)
+        assert!(!e.consider(&g(99.0), 0.4)); // worse than all of them
+        assert!(e.consider(&g(100.0), 0.9)); // replaces the worst (score 0.5)
         assert!(e.score.iter().all(|&s| s > 0.5));
         let mut rng = Rng::new(1);
         assert!(e.pick(&mut rng).is_some());

@@ -1,4 +1,4 @@
-/** Sauvegarde dans le navigateur uniquement (IndexedDB) — aucune API, aucun serveur. */
+/** Browser-only persistence (IndexedDB) — no API, no server. */
 
 export interface SaveMeta {
   savedAt: number // Date.now()
@@ -12,14 +12,14 @@ export interface SaveRecord {
 }
 
 export interface SaveStore {
-  /** false si les données ne survivront pas au rechargement (repli mémoire). */
+  /** false if the data will not survive a reload (in-memory fallback). */
   readonly persistent: boolean
   load(): Promise<SaveRecord | null>
   save(data: Uint8Array, meta: SaveMeta): Promise<void>
   clear(): Promise<void>
 }
 
-/** Repli en mémoire (tests, navigation privée sans IndexedDB). */
+/** In-memory fallback (tests, private browsing without IndexedDB). */
 export class MemoryStore implements SaveStore {
   readonly persistent = false
   private rec: SaveRecord | null = null
@@ -50,7 +50,7 @@ export class IdbStore implements SaveStore {
       req.onerror = () => reject(req.error ?? new Error('IndexedDB indisponible'))
       req.onblocked = () => reject(new Error('IndexedDB bloquée'))
     })
-    // si l'ouverture échoue, on pourra réessayer
+    // if opening fails, we can try again
     this.db.catch(() => (this.db = null))
     return this.db
   }
@@ -81,12 +81,12 @@ export class IdbStore implements SaveStore {
   }
 }
 
-/** IndexedDB si disponible, sinon repli mémoire (jamais d'exception ici). */
+/** IndexedDB if available, otherwise the in-memory fallback (never throws here). */
 export function createSaveStore(): SaveStore {
   try {
     if (typeof indexedDB !== 'undefined' && indexedDB) return new IdbStore()
   } catch {
-    // accès refusé (certains modes privés) : repli
+    // access denied (some private modes): fall back
   }
   return new MemoryStore()
 }

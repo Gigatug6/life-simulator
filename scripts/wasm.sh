@@ -1,5 +1,5 @@
 #!/bin/sh
-# Usage : scripts/wasm.sh build | test   (cargo tourne uniquement dans Docker)
+# Usage: scripts/wasm.sh build | test   (cargo only ever runs inside Docker)
 cd "$(dirname "$0")/.." || exit 1
 case "$1" in
   build) docker compose --profile wasm run --rm wasm sh -c "cd wasm && cargo build --release --target wasm32-unknown-unknown && mkdir -p ../src/sim/wasm && cp target/wasm32-unknown-unknown/release/life_sim.wasm ../src/sim/wasm/life.wasm" ;;

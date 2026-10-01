@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test'
 
-// Vérifie que le site fonctionne depuis un sous-dossier (GitHub Pages : /<dépôt>/) :
-// toutes les ressources (JS, worker, WASM) se chargent, sans erreur 404 ni erreur console.
-test('le site se charge et démarre le moteur (y compris sous un sous-dossier)', async ({ page }) => {
+// Checks that the site works from a sub-folder (GitHub Pages: /<repo>/):
+// every resource (JS, worker, WASM) loads, with no 404 error and no console error.
+test('the site loads and starts the engine (including under a sub-folder)', async ({ page }) => {
   const failed: string[] = []
   const errors: string[] = []
   page.on('response', (r) => {
@@ -12,7 +12,7 @@ test('le site se charge et démarre le moteur (y compris sous un sous-dossier)',
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text())
   })
-  await page.goto('./') // relatif à l'adresse de base (BASE_URL), pas à la racine du domaine
+  await page.goto('./') // relative to the base address (BASE_URL), not to the domain root
   await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
   await expect(page.getByTestId('population')).toContainText('herbivores')
   expect(failed).toEqual([])

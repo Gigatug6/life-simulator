@@ -1,4 +1,4 @@
-/** Couleurs du terrain (miroir des biomes de wasm/src/world.rs). */
+/** Terrain colours (mirror of the biomes in wasm/src/world.rs). */
 import { Biome } from '../sim/engine'
 
 type RGB = [number, number, number]
@@ -13,7 +13,7 @@ const FOREST_DRY = hex(0x3d5a2a)
 const FOREST_LUSH = hex(0x1f7a30)
 const MOUNTAIN = hex(0x7d7a75)
 
-/** Capacité d'herbe par biome (miroir de plants::capacity), pour normaliser l'herbe. */
+/** Grass capacity per biome (mirror of plants::capacity), used to normalize the grass. */
 export const CAPACITY = [0, 0, 0.1, 1, 0.8, 0.15]
 
 const mix = (a: RGB, b: RGB, t: number, out: Uint8ClampedArray, o: number) => {
@@ -23,7 +23,7 @@ const mix = (a: RGB, b: RGB, t: number, out: Uint8ClampedArray, o: number) => {
   out[o + 3] = 255
 }
 
-/** Écrit la couleur RGBA d'une cellule dans `out[o..o+4]`. */
+/** Writes the RGBA colour of a cell into `out[o..o+4]`. */
 export function terrainColor(biome: number, grass: number, out: Uint8ClampedArray, o: number) {
   const cap = CAPACITY[biome] ?? 0
   const t = cap > 0 ? Math.min(1, grass / cap) : 0

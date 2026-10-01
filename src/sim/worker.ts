@@ -5,7 +5,7 @@ import { SimController } from './controller'
 import type { FromWorker, ToWorker } from './protocol'
 
 const FRAME_MS = 33
-const BUDGET_MS = 22 // temps de calcul max par image : la simulation ralentit plutôt que de geler
+const BUDGET_MS = 22 // max compute time per frame: the simulation slows down rather than freezing
 
 let sim: SimController | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -18,14 +18,14 @@ function loop() {
   if (sim.catchingUp) {
     const r = sim.stepCatchup(20)
     post({ type: 'catchup', ...r })
-    timer = setTimeout(loop, 0) // laisse passer les messages (« passer », sauvegarde)
+    timer = setTimeout(loop, 0) // lets messages through (skip, save)
     return
   }
   const t0 = performance.now()
   const ticks = sim.advance(BUDGET_MS)
   const frame = sim.frame()
   const dt = Math.max(performance.now() - t0, 1)
-  const transfer: Transferable[] = [frame.x.buffer, frame.y.buffer, frame.angle.buffer, frame.energy.buffer, frame.species.buffer, frame.id.buffer]
+  const transfer: Transferable[] = [frame.x.buffer, frame.y.buffer, frame.angle.buffer, frame.energy.buffer, frame.species.buffer, frame.id.buffer, frame.size.buffer, frame.hue.buffer, frame.signal.buffer, frame.asleep.buffer]
   if (frame.grass) transfer.push(frame.grass.buffer)
   if (frame.selected) transfer.push(frame.selected.genome.buffer)
   post({ type: 'frame', frame, ticksPerSecond: (ticks / dt) * 1000 }, transfer)
@@ -45,7 +45,7 @@ self.onmessage = async (e: MessageEvent<ToWorker>) => {
       if (restored && msg.elapsedMs && msg.elapsedMs > 5000) sim.beginCatchup(msg.elapsedMs)
       post({ type: 'ready', version: engine.version(), restored })
       const t = sim.terrain()
-      post({ type: 'terrain', ...t }, [t.biome.buffer])
+      post({ type: 'terrain', ...t }, [t.biome.buffer, t.altitude.buffer])
       loop()
     } else if (!sim) {
       return

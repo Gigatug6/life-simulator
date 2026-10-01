@@ -1,5 +1,5 @@
-# Image de production : compile le moteur Rust -> WASM, build Vite, puis serveur statique Caddy.
-# Usage : make prod  (http://localhost:8080) — aucune API, tout reste dans le navigateur.
+# Production image: compiles the Rust engine -> WASM, builds with Vite, then serves statically with Caddy.
+# Usage: make prod  (http://localhost:8080) — no API, everything stays in the browser.
 FROM rust:1-slim-bookworm AS wasm
 RUN rustup target add wasm32-unknown-unknown
 WORKDIR /w

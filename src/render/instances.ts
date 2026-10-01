@@ -1,10 +1,33 @@
-/** Remplit les tampons d'instances (matrices 4×4 + couleurs) des créatures. Pur, testable. */
+/** Fills the creature instance buffers (4×4 matrices + colours). Pure, testable. */
 
-export const MAX_ENERGY = 100 // miroir de life::MAX_ENERGY
-const HERB: [number, number, number] = [1.0, 0.82, 0.25]
-const CARN: [number, number, number] = [1.0, 0.2, 0.18]
+import { lineageRgb } from './creatureColor'
 
-/** Taille en cellules : jamais plus petite que ~4 px à l'écran. */
+export const MAX_ENERGY = 100 // mirror of life::MAX_ENERGY
+
+/**
+ * Writes the colour of creature `i` into `colors[i*3..]`: lineage hue, brightness following the energy
+ * relative to the body's own capacity, washed out towards white while the creature glows.
+ */
+export function writeCreatureColor(
+  colors: Float32Array,
+  i: number,
+  species: number,
+  hue: number,
+  energy: number,
+  size: number,
+  signal: number,
+  asleep = false,
+) {
+  const [r, g, b] = lineageRgb(species, hue)
+  // a sleeper is drawn darker
+  const k = (0.45 + 0.55 * Math.min(1, Math.max(0, energy / (MAX_ENERGY * size)))) * (asleep ? 0.55 : 1)
+  const glow = signal * 0.75
+  colors[i * 3] = r * k + (1 - r * k) * glow
+  colors[i * 3 + 1] = g * k + (1 - g * k) * glow
+  colors[i * 3 + 2] = b * k + (1 - b * k) * glow
+}
+
+/** Size in cells: never smaller than ~4 px on screen. */
 export const creatureSize = (zoom: number) => Math.max(1.1, 4 / zoom)
 
 export function writeInstances(
@@ -14,13 +37,19 @@ export function writeInstances(
   angle: Float32Array,
   energy: Float32Array,
   species: Uint8Array,
+  size: Float32Array,
+  hue: Float32Array,
+  signal: Float32Array,
+  asleep: Uint8Array,
   zoom: number,
   matrices: Float32Array,
   colors: Float32Array,
 ) {
-  const s = creatureSize(zoom)
+  const base = creatureSize(zoom)
   for (let i = 0; i < n; i++) {
-    // l'axe y du monde pointe vers le bas : en scène, y et l'angle sont inversés
+    // heritable body size; a glowing creature is drawn a little bigger (its halo)
+    const s = base * size[i]! * (1 + 0.35 * signal[i]!)
+    // the world y axis points down: in the scene, y and the angle are flipped
     const a = -angle[i]!
     const c = Math.cos(a) * s
     const sn = Math.sin(a) * s
@@ -41,10 +70,6 @@ export function writeInstances(
     matrices[m + 13] = -y[i]!
     matrices[m + 14] = 0.1
     matrices[m + 15] = 1
-    const base = species[i] === 1 ? CARN : HERB
-    const k = 0.45 + 0.55 * Math.min(1, Math.max(0, energy[i]! / MAX_ENERGY))
-    colors[i * 3] = base[0] * k
-    colors[i * 3 + 1] = base[1] * k
-    colors[i * 3 + 2] = base[2] * k
+    writeCreatureColor(colors, i, species[i]!, hue[i]!, energy[i]!, size[i]!, signal[i]!, asleep[i] === 1)
   }
 }

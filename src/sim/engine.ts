@@ -1,4 +1,4 @@
-/** Charge le module WASM et expose son API typée. Aucune dépendance à Vue/Pinia. */
+/** Loads the WASM module and exposes its typed API. No dependency on Vue/Pinia. */
 export interface LifeExports {
   version(): number
   tick(): number
@@ -34,6 +34,19 @@ export interface LifeExports {
   creature_genome_ptr(): number
   genome_len(): number
   learn_len(): number
+  trait_len(): number
+  brain_in(): number
+  brain_out(): number
+  mem_len(): number
+  creature_memory_ptr(): number
+  creature_signal_ptr(): number
+  creature_fatigue_ptr(): number
+  creature_asleep_ptr(): number
+  stats_kind_share(species: number, kind: number): number
+  stats_mean_signal(species: number): number
+  stats_new_wiring(species: number): number
+  creature_traits_ptr(): number
+  stats_mean_trait(species: number, k: number): number
   world_rescues(): number
   elite_count(): number
   elite_slots(): number
@@ -59,10 +72,10 @@ export async function loadEngine(source: BufferSource | Response | Promise<Respo
   return result.instance.exports as unknown as LifeExports
 }
 
-/** Biomes (miroir de wasm/src/world.rs). */
+/** Biomes (mirror of wasm/src/world.rs). */
 export const Biome = { DeepWater: 0, ShallowWater: 1, Beach: 2, Plain: 3, Forest: 4, Mountain: 5 } as const
 
-/** Vue sur les biomes du monde (valide jusqu'à la prochaine croissance de la mémoire WASM). */
+/** View over the world biomes (valid until the WASM memory next grows). */
 export function biomeView(e: LifeExports): Uint8Array {
   return new Uint8Array(e.memory.buffer, e.world_biome_ptr(), e.world_width() * e.world_height())
 }
@@ -75,14 +88,20 @@ export function grassView(e: LifeExports): Float32Array {
   return new Float32Array(e.memory.buffer, e.world_grass_ptr(), e.world_width() * e.world_height())
 }
 
-/** Longueur du génome en f32 (miroir de brain::GENOME_LEN ; vérifiée par un test). */
-export const GENOME_LEN = 185
-/** Deltas appris par créature (miroir de brain::LEARN_LEN). */
-export const LEARN_LEN = 48
-/** Emplacements de la mémoire des élites (miroir de elite::ELITES). */
+/** Genome length in f32 (mirror of brain::GENOME_LEN; checked by a test). */
+export const GENOME_LEN = 258
+/** Learned deltas per creature (mirror of brain::LEARN_LEN). */
+export const LEARN_LEN = 60
+/** Memory cells per creature (mirror of creatures::MEM_LEN). */
+export const MEM_LEN = 2
+/** Physical traits per creature (mirror of traits::TRAIT_LEN). */
+export const TRAIT_LEN = 4
+/** Indices of the physical traits (mirror of wasm/src/traits.rs). */
+export const Trait = { Size: 0, Speed: 1, Vision: 2, Hue: 3 } as const
+/** Slots of the elite memory (mirror of elite::ELITES). */
 export const ELITE_SLOTS = 8
 
-/** Champs SoA des créatures : nom, taille d'un élément, constructeur de vue, getter de pointeur. */
+/** SoA fields of the creatures: name, element size, view constructor, pointer getter. */
 export const CREATURE_FIELDS = [
   { name: 'x', size: 4, ptr: 'creature_x_ptr', ctor: Float32Array },
   { name: 'y', size: 4, ptr: 'creature_y_ptr', ctor: Float32Array },
@@ -94,11 +113,16 @@ export const CREATURE_FIELDS = [
   { name: 'species', size: 1, ptr: 'creature_species_ptr', ctor: Uint8Array },
   { name: 'genome', size: GENOME_LEN * 4, ptr: 'creature_genome_ptr', ctor: Float32Array },
   { name: 'learned', size: LEARN_LEN * 4, ptr: 'creature_learned_ptr', ctor: Float32Array },
+  { name: 'traits', size: TRAIT_LEN * 4, ptr: 'creature_traits_ptr', ctor: Float32Array },
+  { name: 'memory', size: MEM_LEN * 4, ptr: 'creature_memory_ptr', ctor: Float32Array },
+  { name: 'signal', size: 4, ptr: 'creature_signal_ptr', ctor: Float32Array },
+  { name: 'fatigue', size: 4, ptr: 'creature_fatigue_ptr', ctor: Float32Array },
+  { name: 'asleep', size: 1, ptr: 'creature_asleep_ptr', ctor: Uint8Array },
 ] as const
 
 export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
 
-/** Vue sur un champ des créatures vivantes (valide jusqu'à la prochaine croissance mémoire). */
+/** View over a field of the living creatures (valid until memory next grows). */
 interface CreatureViews {
   x: Float32Array
   y: Float32Array
@@ -110,6 +134,11 @@ interface CreatureViews {
   species: Uint8Array
   genome: Float32Array
   learned: Float32Array
+  traits: Float32Array
+  memory: Float32Array
+  signal: Float32Array
+  fatigue: Float32Array
+  asleep: Uint8Array
 }
 
 export function creatureView<K extends CreatureField>(e: LifeExports, name: K): CreatureViews[K] {

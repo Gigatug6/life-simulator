@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('le monde est affiché et la caméra répond à la molette', async ({ page }) => {
+test('the world is displayed and the camera responds to the wheel', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
   await expect(page.getByTestId('population')).toContainText('herbivores')
@@ -14,7 +14,7 @@ test('le monde est affiché et la caméra répond à la molette', async ({ page 
   await page.mouse.up()
   await page.waitForTimeout(300)
   await page.screenshot({ path: 'artifacts/screens/world-zoom.png' })
-  // le canvas n'est pas vide : au moins quelques couleurs distinctes
+  // the canvas is not empty: at least a few distinct colours
   const colors = await page.getByTestId('world-canvas').evaluate((c: HTMLCanvasElement) => {
     const g = document.createElement('canvas')
     g.width = 64

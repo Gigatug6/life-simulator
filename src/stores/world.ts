@@ -4,16 +4,35 @@ import { History, forgetHistory, loadHistory, saveHistory, type Sample } from '.
 import { snapshotInfo } from '../sim/snapshot'
 import { createSaveStore, type SaveStore } from '../persist/store'
 import SimWorker from '../sim/worker?worker'
+import { SPEEDS } from '../sim/protocol'
+import { parseSeed } from '../sim/seed'
+import type { WorldEffect } from '../render/effects'
 import type { Frame, Inspected, FromWorker, Speed, ToWorker } from '../sim/protocol'
 
-/** État du monde côté UI. Les tableaux typés restent hors de la réactivité profonde. */
+/** World state on the UI side. Typed arrays stay out of deep reactivity. */
 export const useWorldStore = defineStore('world', () => {
   const status = ref('Chargement du moteur…')
   const ready = ref(false)
-  const speed = ref<Speed>(1)
+  const SPEED_KEY = 'life-simulator:ui:speed'
+  /** The chosen speed (pause included) is remembered across reloads. */
+  const readSpeed = (): Speed => {
+    try {
+      const v = Number(localStorage.getItem(SPEED_KEY))
+      return (SPEEDS as readonly number[]).includes(v) && localStorage.getItem(SPEED_KEY) !== null ? (v as Speed) : 1
+    } catch {
+      return 1
+    }
+  }
+  const speed = ref<Speed>(readSpeed())
   const ticksPerSecond = ref(0)
   const frame = shallowRef<Frame | null>(null)
-  const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array } | null>(null)
+  const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array; altitude: Float32Array } | null>(null)
+  /** Latest visual event of a "God" power; the id changes on every event so that watchers fire even for equal ones. */
+  const lastEffect = shallowRef<{ id: number; effect: WorldEffect } | null>(null)
+  let effectId = 0
+  const pushEffect = (effect: WorldEffect) => (lastEffect.value = { id: ++effectId, effect })
+  /** Latest grass layer (the frames only carry it now and then); renderers created later start from it. */
+  const grass = shallowRef<Float32Array | null>(null)
   const selectedId = ref<number | null>(null)
   const lastSelected = shallowRef<Inspected | null>(null)
   const history = shallowRef<Sample[]>([])
@@ -25,7 +44,7 @@ export const useWorldStore = defineStore('world', () => {
   const saveError = ref<string | null>(null)
   const persistent = ref(false)
   let worker: Worker | null = null
-  let startGen = 0 // numéro du dernier démarrage : un démarrage plus ancien encore en attente s'abandonne
+  let startGen = 0 // number of the latest start: an older start that is still pending gives up
   let saveStore: SaveStore | null = null
   let pendingExport = false
   let pendingImport = false
@@ -39,7 +58,7 @@ export const useWorldStore = defineStore('world', () => {
     if (document.visibilityState === 'hidden') save()
   }
 
-  /** Sauvegarde automatique : toutes les 10 s, plus espacée quand le monde est gros (≈ 2 s par Mo, max 60 s). */
+  /** Autosave: every 10 s, spaced out when the world is big (≈ 2 s per MB, max 60 s). */
   function scheduleAutosave() {
     if (autosave) clearTimeout(autosave)
     autosave = setTimeout(() => {
@@ -48,16 +67,18 @@ export const useWorldStore = defineStore('world', () => {
     }, autosaveMs)
   }
 
-  /** Demande un snapshot au worker ; l'écriture se fait ici (le thread principal survit à pagehide). */
+  /** Asks the worker for a snapshot; the write happens here (the main thread survives pagehide). */
   function save() {
     if (ready.value) send({ type: 'save' })
   }
 
-  async function start(seed = Math.floor(Math.random() * 2 ** 32), w = 256, h = 256) {
+  // a fresh world uses the seed of the page address (?seed=N) when there is one, otherwise a random seed
+  async function start(seed = parseSeed(location.search) ?? Math.floor(Math.random() * 2 ** 32), w = 256, h = 256) {
     stop()
     const gen = ++startGen
     status.value = 'Chargement du moteur…'
     frame.value = null
+    grass.value = null
     selectedId.value = null
     lastSelected.value = null
     catchup.value = null
@@ -78,8 +99,8 @@ export const useWorldStore = defineStore('world', () => {
     } catch (err) {
       saveError.value = `Lecture de la sauvegarde impossible : ${err}`
     }
-    if (gen !== startGen) return // un autre démarrage (ou un arrêt) a eu lieu pendant la lecture de la sauvegarde
-    // historique des courbes : repris pour le même monde, tronqué à l'instant de la sauvegarde
+    if (gen !== startGen) return // another start (or a stop) happened while the save was being read
+    // chart history: resumed for the same world, truncated at the save instant
     hist = snapshot ? loadHistory(worldSeed) : new History()
     hist.pruneAfter(savedTick)
     history.value = hist.points.slice()
@@ -89,6 +110,7 @@ export const useWorldStore = defineStore('world', () => {
       if (m.type === 'ready') {
         ready.value = true
         restored.value = m.restored
+        send({ type: 'setSpeed', speed: speed.value }) // the worker starts at ×1: apply the remembered speed
         if (pendingImport) {
           pendingImport = false
           if (!m.restored) saveError.value = 'Fichier de sauvegarde invalide ou incompatible : un nouveau monde a été créé.'
@@ -100,8 +122,9 @@ export const useWorldStore = defineStore('world', () => {
       } else if (m.type === 'terrain') terrain.value = markRaw(m)
       else if (m.type === 'frame') {
         frame.value = markRaw(m.frame)
+        if (m.frame.grass) grass.value = markRaw(m.frame.grass)
         const fr = m.frame
-        if (hist.push({ tick: fr.tick, herbivores: fr.herbivores, carnivores: fr.carnivores, hiddenHerbivores: fr.hiddenHerbivores, hiddenCarnivores: fr.hiddenCarnivores, iqHerbivores: fr.iqHerbivores, iqCarnivores: fr.iqCarnivores })) {
+        if (hist.push({ tick: fr.tick, herbivores: fr.herbivores, carnivores: fr.carnivores, hiddenHerbivores: fr.hiddenHerbivores, hiddenCarnivores: fr.hiddenCarnivores, iqHerbivores: fr.iqHerbivores, iqCarnivores: fr.iqCarnivores, body: fr.bodyHerbivores, kinds: fr.kindsHerbivores })) {
           history.value = hist.points.slice()
         }
         if (m.frame.selected) lastSelected.value = markRaw(m.frame.selected)
@@ -116,7 +139,7 @@ export const useWorldStore = defineStore('world', () => {
         }
         saveHistory(m.meta.seed, hist)
         autosaveMs = Math.min(60_000, Math.max(10_000, (m.data.length / 1e6) * 2000))
-        if (writing) return // écriture précédente encore en cours : on n'empile pas
+        if (writing) return // previous write still in progress: do not pile up
         writing = true
         store
           ?.save(m.data, { savedAt: Date.now(), ...m.meta })
@@ -140,14 +163,14 @@ export const useWorldStore = defineStore('world', () => {
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 
-  /** Télécharge le monde courant dans un fichier .life (en plus de la sauvegarde navigateur). */
+  /** Downloads the current world as a .life file (in addition to the browser save). */
   function exportFile() {
     if (!ready.value) return
     pendingExport = true
     save()
   }
 
-  /** Remplace le monde par celui d'un fichier .life. */
+  /** Replaces the world with the one from a .life file. */
   async function importFile(file: File) {
     const data = new Uint8Array(await file.arrayBuffer())
     const info = snapshotInfo(data)
@@ -166,7 +189,7 @@ export const useWorldStore = defineStore('world', () => {
     await start()
   }
 
-  /** Efface la sauvegarde et repart d'un nouveau monde (graine aléatoire). */
+  /** Erases the save and starts over with a new world (random seed). */
   async function newWorld() {
     try {
       await (saveStore ?? createSaveStore()).clear()
@@ -176,11 +199,12 @@ export const useWorldStore = defineStore('world', () => {
     forgetHistory(worldSeed)
     savedAt.value = null
     frame.value = null
-    await start()
+    grass.value = null
+    await start(Math.floor(Math.random() * 2 ** 32)) // "New world" is always a different world, whatever the address says
   }
 
   function stop() {
-    startGen++ // annule un démarrage en attente
+    startGen++ // cancels a pending start
     if (autosave) clearTimeout(autosave)
     autosave = null
     document.removeEventListener('visibilitychange', onHidden)
@@ -191,7 +215,7 @@ export const useWorldStore = defineStore('world', () => {
     catchup.value = null
   }
 
-  /** Sélectionne la créature la plus proche de (x, y) dans `maxDist` cellules ; sinon désélectionne. */
+  /** Selects the creature nearest to (x, y) within `maxDist` cells; otherwise deselects. */
   function pick(x: number, y: number, maxDist: number) {
     const f = frame.value
     let best = -1
@@ -217,11 +241,16 @@ export const useWorldStore = defineStore('world', () => {
 
   function setSpeed(s: Speed) {
     speed.value = s
+    try {
+      localStorage.setItem(SPEED_KEY, String(s))
+    } catch {
+      /* non-critical preference */
+    }
     send({ type: 'setSpeed', speed: s })
   }
 
   return {
-    status, ready, history, speed, ticksPerSecond, frame, terrain, restored, catchup, savedAt, saveError, persistent,
+    status, ready, history, speed, ticksPerSecond, frame, terrain, grass, lastEffect, pushEffect, restored, catchup, savedAt, saveError, persistent,
     selectedId, lastSelected, pick, select,
     start, stop, setSpeed, save, exportFile, importFile, newWorld,
     skipCatchup: () => send({ type: 'skipCatchup' }),

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test("l'inspecteur affiche une créature et son cerveau", async ({ page }) => {
+test("the inspector shows a creature and its brain", async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('population')).toContainText('herbivores')
   await page.getByRole('button', { name: 'Pause' }).click()
@@ -9,7 +9,7 @@ test("l'inspecteur affiche une créature et son cerveau", async ({ page }) => {
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
 
-  // on sème 10 herbivores au centre pour être sûr de viser une créature
+  // sow 10 herbivores at the centre to be sure to hit a creature
   await page.getByTestId('tool-herbivore').click()
   await page.mouse.click(cx, cy)
   await page.waitForTimeout(300)
@@ -18,15 +18,23 @@ test("l'inspecteur affiche une créature et son cerveau", async ({ page }) => {
   await page.mouse.click(cx, cy)
   await expect(page.getByTestId('inspector')).toBeVisible()
   await expect(page.getByTestId('inspector-hidden')).toHaveText('4')
+  // heritable body plan: size multiplier near 1 for a founder
+  await expect(page.getByTestId('inspector-size')).toHaveText(/×(0\.9\d|1\.0\d|1\.10)/)
   await expect(page.getByTestId('brain')).toBeVisible()
+  // new neurons: founders only have classic (tanh) neurons and a light signal that starts nearly dark
+  await expect(page.getByTestId('inspector-kinds')).toContainText('Classique')
+  // fatigue and sleep: a young founder is awake and barely tired
+  await expect(page.getByTestId('inspector-state')).toHaveText(/^(Éveillé|Dort) · fatigue \d+ %$/)
+  await expect(page.getByTestId('inspector-light')).toHaveText(/^\d+ %$/)
+  await expect(page.locator('[data-testid="brain"] g[data-kind="tanh"]').first()).toBeVisible()
   await page.screenshot({ path: 'artifacts/screens/inspector.png' })
 
-  // la fiche suit la créature quand le temps passe
+  // the card follows the creature as time passes
   const e1 = await page.getByTestId('inspector-energy').textContent()
   await page.getByRole('button', { name: '×4' }).click()
   await expect.poll(async () => page.getByTestId('inspector-energy').textContent()).not.toBe(e1)
 
-  // fermeture
+  // closing
   await page.getByRole('button', { name: 'Fermer' }).click()
   await expect(page.getByTestId('inspector')).toHaveCount(0)
 })

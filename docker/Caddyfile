@@ -8,7 +8,7 @@
 	encode zstd gzip
 	file_server
 
-	# fichiers à empreinte (JS, CSS, WASM) : cache longue durée ; la page, toujours revalidée
+	# fingerprinted files (JS, CSS, WASM): long-lived cache; the page is always revalidated
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 	@page not path /assets/*

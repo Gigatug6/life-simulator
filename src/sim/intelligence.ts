@@ -1,4 +1,4 @@
-/** Indice d'intelligence : compétence comportementale (0,5 = hasard, 1 = parfaite) -> échelle 0-100. */
+/** Intelligence index: behavioural competence (0.5 = random, 1 = perfect) -> 0-100 scale. */
 export const intelligenceIndex = (competence: number) => Math.round(Math.min(1, Math.max(0, (competence - 0.5) / 0.5)) * 1000) / 10
 
 export interface Level {
@@ -6,7 +6,7 @@ export interface Level {
   min: number
 }
 
-/** Paliers d'intelligence du monde, du plus bas au plus haut. */
+/** World intelligence levels (names are UI text, in French), lowest to highest. */
 export const LEVELS: Level[] = [
   { name: 'Errants', min: 0 },
   { name: 'Fourrageurs', min: 15 },

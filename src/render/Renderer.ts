@@ -3,11 +3,14 @@ import { ViewState } from './view'
 import { terrainColor } from './terrainColor'
 import { writeInstances } from './instances'
 import type { Frame } from '../sim/protocol'
+import type { WorldRenderer } from './types'
+import { METEOR_FALL, clamp01, easeOut, effectDuration, type WorldEffect } from './effects'
+import { lineageRgb } from './creatureColor'
 
-const MAX_CREATURES = 20000 // miroir de creatures::MAX
+const MAX_CREATURES = 20000 // mirror of creatures::MAX
 
-/** Rendu 2D vue du ciel. Aucune dépendance à Vue : les données entrent par des méthodes. */
-export class Renderer {
+/** Top-down 2D renderer. No dependency on Vue: data comes in through methods. */
+export class Renderer implements WorldRenderer {
   readonly view = new ViewState()
   private renderer: THREE.WebGLRenderer
   private scene = new THREE.Scene()
@@ -28,8 +31,9 @@ export class Renderer {
   private pointers = new Map<number, { x: number; y: number }>()
   private pinchDist = 0
   private cleanup: Array<() => void> = []
+  private rings: Array<{ mesh: THREE.Mesh; effect: WorldEffect; start: number }> = []
   private downAt: { x: number; y: number; t: number } | null = null
-  /** Appelé sur un clic (sans glisser) avec les coordonnées du monde en cellules. */
+  /** Called on a click (without dragging) with the world coordinates in cells. */
   onWorldClick: ((x: number, y: number) => void) | null = null
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -56,6 +60,10 @@ export class Renderer {
     this.resize()
     const loop = () => {
       this.raf = requestAnimationFrame(loop)
+      if (this.rings.length) {
+        this.tickRings(performance.now() / 1000)
+        this.dirty = true // the shock waves animate: keep drawing while there are some
+      }
       if (this.dirty) {
         this.draw()
         this.dirty = false
@@ -64,8 +72,12 @@ export class Renderer {
     loop()
   }
 
-  /** Définit le terrain (une fois par monde). */
-  setTerrain(w: number, h: number, biome: Uint8Array) {
+  get pixelsPerCell() {
+    return this.view.zoom
+  }
+
+  /** Sets the terrain (once per world). The 2D view ignores the altitude. */
+  setTerrain(w: number, h: number, biome: Uint8Array, _altitude?: Float32Array) {
     this.disposeTerrain()
     this.w = w
     this.h = h
@@ -82,7 +94,7 @@ export class Renderer {
     this.terrainTex.needsUpdate = true
     this.terrainMat = new THREE.MeshBasicMaterial({ map: this.terrainTex })
     this.terrainMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), this.terrainMat)
-    // cellule (0,0) en haut à gauche ; l'axe y du monde pointe vers le bas -> y scène = -y monde
+    // cell (0,0) at the top left; the world y axis points down -> scene y = -world y
     this.terrainMesh.position.set(w / 2, -h / 2, 0)
     this.scene.add(this.terrainMesh)
     this.view.resize(this.canvas.clientWidth || 800, this.canvas.clientHeight || 600)
@@ -90,7 +102,7 @@ export class Renderer {
     this.dirty = true
   }
 
-  /** Met à jour les couleurs avec l'herbe courante (w*h). */
+  /** Updates the colours with the current grass (w*h). */
   setGrass(grass: Float32Array) {
     if (!this.terrainTex || !this.biome || grass.length !== this.w * this.h) return
     const data = this.terrainTex.image.data as unknown as Uint8ClampedArray
@@ -99,13 +111,13 @@ export class Renderer {
     this.dirty = true
   }
 
-  /** Entoure d'un anneau la créature suivie (null = aucune). */
+  /** Draws a ring around the followed creature (null = none). */
   setSelection(pos: { x: number; y: number } | null) {
     this.ringPos = pos
     this.dirty = true
   }
 
-  /** Met à jour les créatures depuis une image de simulation. */
+  /** Updates the creatures from a simulation frame. */
   setCreatures(frame: Frame) {
     this.lastFrame = frame
     this.uploadCreatures()
@@ -115,7 +127,7 @@ export class Renderer {
     const f = this.lastFrame
     if (!f) return
     const n = Math.min(f.count, MAX_CREATURES)
-    writeInstances(n, f.x, f.y, f.angle, f.energy, f.species, this.view.zoom,
+    writeInstances(n, f.x, f.y, f.angle, f.energy, f.species, f.size, f.hue, f.signal, f.asleep, this.view.zoom,
       this.creatures.instanceMatrix.array as Float32Array, this.creatures.instanceColor!.array as Float32Array)
     this.creatures.count = n
     this.creatures.instanceMatrix.needsUpdate = true
@@ -124,7 +136,61 @@ export class Renderer {
     this.dirty = true
   }
 
-  /** Jour/nuit : assombrit le terrain (0 = nuit, 1 = plein jour). */
+  /** The 2D view has no sun or seasons: only `setDaylight` matters. */
+  setClock(_tick: number) {}
+
+  /** No weather in the flat view. */
+  setWeather(_rain: number) {}
+
+  /** Nothing costly to turn off in the flat view. */
+  setEffectsEnabled(_on: boolean) {}
+
+  /** The "God" events are shown as an expanding ring (orange for a meteor, gold for a blessing, species colour for a spawn). */
+  addEffect(e: WorldEffect) {
+    const color =
+      e.kind === 'meteor' ? new THREE.Color(1, 0.55, 0.15) : e.kind === 'bless' ? new THREE.Color(1, 0.85, 0.35) : new THREE.Color(...lineageRgb(e.species ?? 0, 0.5))
+    const mesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.88, 1, 56),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthTest: false, side: THREE.DoubleSide }),
+    )
+    mesh.position.set(e.x, -e.y, 0.4)
+    mesh.renderOrder = 9
+    this.scene.add(mesh)
+    this.rings.push({ mesh, effect: e, start: performance.now() / 1000 })
+  }
+
+  private tickRings(now: number) {
+    this.rings = this.rings.filter((r) => {
+      const t = now - r.start
+      const e = r.effect
+      let scale = 0
+      let alpha = 0
+      if (e.kind === 'meteor') {
+        const u = clamp01((t - METEOR_FALL) / 0.9) // nothing until the meteor lands
+        scale = e.radius * 1.15 * easeOut(u)
+        alpha = t < METEOR_FALL ? 0 : 0.9 * (1 - clamp01((t - METEOR_FALL) / 1.1))
+      } else if (e.kind === 'bless') {
+        const u = clamp01(t / 1.4)
+        scale = e.radius * (0.4 + 0.7 * easeOut(u))
+        alpha = 0.85 * (1 - u)
+      } else {
+        const u = clamp01(t / effectDuration('spawn'))
+        scale = 1.5 + 3.5 * easeOut(u)
+        alpha = 0.9 * (1 - u)
+      }
+      r.mesh.scale.setScalar(Math.max(scale, 0.01))
+      ;(r.mesh.material as THREE.MeshBasicMaterial).opacity = alpha
+      const alive = t < effectDuration(e.kind)
+      if (!alive) {
+        this.scene.remove(r.mesh)
+        r.mesh.geometry.dispose()
+        ;(r.mesh.material as THREE.Material).dispose()
+      }
+      return alive
+    })
+  }
+
+  /** Day/night: darkens the terrain (0 = night, 1 = full day). */
   setDaylight(d: number) {
     this.terrainMat?.color.setScalar(0.4 + 0.6 * d)
     this.dirty = true
@@ -138,7 +204,7 @@ export class Renderer {
     this.dirty = true
   }
 
-  /** Capture un PNG (data URL) de l'image courante. */
+  /** Captures a PNG (data URL) of the current image. */
   snapshot(): string {
     this.draw()
     return this.canvas.toDataURL('image/png')
@@ -184,7 +250,7 @@ export class Renderer {
       c.setPointerCapture(e.pointerId)
       this.pointers.set(e.pointerId, local(e))
       this.pinchDist = this.pointerDistance()
-      this.downAt = this.pointers.size === 1 ? { ...local(e), t: performance.now() } : null
+      this.downAt = this.pointers.size === 1 ? { ...local(e), t: e.timeStamp } : null // event time, not handler time: robust when the main thread is busy
     })
     on('pointermove', (e) => {
       const prev = this.pointers.get(e.pointerId)
@@ -206,7 +272,7 @@ export class Renderer {
       const d = this.downAt
       if (d && e.type === 'pointerup' && this.pointers.size === 1) {
         const p = local(e)
-        if (Math.hypot(p.x - d.x, p.y - d.y) < 5 && performance.now() - d.t < 400) {
+        if (Math.hypot(p.x - d.x, p.y - d.y) < 5 && e.timeStamp - d.t < 400) {
           const w = this.view.screenToWorld(p.x, p.y)
           this.onWorldClick?.(w.x, w.y)
         }
@@ -244,6 +310,12 @@ export class Renderer {
     cancelAnimationFrame(this.raf)
     this.cleanup.forEach((f) => f())
     this.disposeTerrain()
+    this.rings.forEach((r) => {
+      this.scene.remove(r.mesh)
+      r.mesh.geometry.dispose()
+      ;(r.mesh.material as THREE.Material).dispose()
+    })
+    this.rings = []
     this.scene.remove(this.ring)
     this.ring.geometry.dispose()
     ;(this.ring.material as THREE.Material).dispose()

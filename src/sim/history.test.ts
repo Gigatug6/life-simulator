@@ -4,7 +4,7 @@ import { History, type Sample } from './history'
 const s = (tick: number, h = 10): Sample => ({ tick, herbivores: h, carnivores: 1, hiddenHerbivores: 4, hiddenCarnivores: 4 })
 
 describe('History', () => {
-  it("n'échantillonne qu'à intervalle minimal et ignore les retours en arrière", () => {
+  it("only samples at the minimum interval and ignores going back in time", () => {
     const h = new History(60)
     expect(h.push(s(0))).toBe(true)
     expect(h.push(s(30))).toBe(false)
@@ -13,7 +13,7 @@ describe('History', () => {
     expect(h.points.map((p) => p.tick)).toEqual([0, 60])
   })
 
-  it('reste borné en gardant toute la chronologie (résolution divisée par deux)', () => {
+  it('stays bounded while keeping the whole timeline (resolution halved)', () => {
     const h = new History(10, 50)
     for (let t = 0; t < 10_000; t += 10) h.push(s(t))
     expect(h.points.length).toBeLessThanOrEqual(50)
@@ -22,7 +22,7 @@ describe('History', () => {
     expect(h.every).toBeGreaterThan(10)
   })
 
-  it('sérialise, restaure et rejette les données invalides', () => {
+  it('serializes, restores and rejects invalid data', () => {
     const h = new History(60)
     h.push(s(0))
     h.push(s(60, 20))
@@ -34,17 +34,19 @@ describe('History', () => {
     expect(History.fromJSON(null).points).toEqual([])
   })
 
-  it('oublie les points postérieurs à un tick', () => {
+  it('forgets the points after a tick', () => {
     const h = new History(60)
     for (let t = 0; t <= 300; t += 60) h.push(s(t))
     h.pruneAfter(150)
     expect(h.points.map((p) => p.tick)).toEqual([0, 60, 120])
   })
 
-  it("accepte les anciens échantillons sans indice d'intelligence", () => {
+  it("accepts old samples without an intelligence index", () => {
     const old = { tick: 0, herbivores: 1, carnivores: 0, hiddenHerbivores: 4, hiddenCarnivores: 0 }
     const h = History.fromJSON({ every: 60, points: [old, { ...old, tick: 60, iqHerbivores: 12.5, iqCarnivores: null }] })
     expect(h.points.length).toBe(2)
     expect(h.points[1]!.iqHerbivores).toBe(12.5)
+    const withBody = History.fromJSON({ every: 60, points: [{ ...old, body: { size: 1.1, speed: 0.9, vision: 1 } }] })
+    expect(withBody.points[0]!.body?.size).toBe(1.1)
   })
 })

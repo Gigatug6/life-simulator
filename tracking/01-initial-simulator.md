@@ -1,4 +1,8 @@
-# PROGRESS — Simulateur de vie
+# 01 — Simulateur de vie : construction initiale (chat n°1)
+
+> Fichier d'historique : **ne plus le modifier** (sauf lien vers la suite). Statut : terminé. Suite : [`02-3d-mode-evolution.md`](02-3d-mode-evolution.md).
+> (Il s'appelait `PROGRESS.md` à la racine avant l'introduction du dossier `tracking/`.)
+
 
 ## Statut
 - Phase courante : terminée (phases 0 à 7.3) — reste l'option 7.4 (audio), non demandée
