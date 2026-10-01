@@ -64,4 +64,25 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     expect(b.frame().count).toBe(a.frame().count)
     expect(b.restore(new Uint8Array(5))).toBe(false)
   })
+
+  it('rattrape le temps écoulé en rafale, plafonné, interruptible', async () => {
+    const sim = await make()
+    expect(sim.beginCatchup(10_000)).toBe(300) // 10 s × 30 ticks/s
+    let steps = 0
+    let last = { done: 0, total: 0, finished: false }
+    while (!last.finished && steps++ < 1000) last = sim.stepCatchup(5)
+    expect(last).toMatchObject({ done: 300, total: 300, finished: true })
+    expect(sim.frame().tick).toBe(300)
+    expect(sim.catchingUp).toBe(false)
+    // plafond de ticks
+    expect(sim.beginCatchup(10 * 24 * 3600 * 1000)).toBe(300_000)
+    // « passer »
+    sim.skipCatchup()
+    expect(sim.catchingUp).toBe(false)
+    expect(sim.beginCatchup(0)).toBe(0)
+    // plafond de temps de calcul : horloge simulée qui avance de 100 s à chaque lecture
+    let t = 0
+    sim.beginCatchup(3600_000, () => (t += 100_000))
+    expect(sim.stepCatchup(5, () => (t += 100_000)).finished).toBe(true)
+  })
 })

@@ -1,13 +1,14 @@
 /** Pilote le moteur WASM (boucle, vitesse, images). Indépendant du Worker pour rester testable. */
 import { biomeView, creatureView, grassView, type LifeExports } from './engine'
 import { restoreSnapshot, takeSnapshot } from './snapshot'
-import type { Frame, Speed } from './protocol'
+import { CATCHUP_MAX_MS, CATCHUP_MAX_TICKS, TICK_RATE, type Frame, type Speed } from './protocol'
 
 export const GRASS_EVERY = 10 // une image sur N embarque l'herbe
 
 export class SimController {
   speed: Speed = 1
   private frames = 0
+  private catchup: { total: number; done: number; startedAt: number; maxMs: number } | null = null
 
   constructor(readonly engine: LifeExports) {}
 
@@ -17,6 +18,43 @@ export class SimController {
     e.world_populate(0, herbivores)
     e.world_populate(1, carnivores)
     this.frames = 0
+  }
+
+  get catchingUp() {
+    return this.catchup !== null
+  }
+
+  /** Prépare le rattrapage de `elapsedMs` de temps réel (plafonné) ; renvoie le nombre de ticks visés. */
+  beginCatchup(elapsedMs: number, now: () => number = () => performance.now()): number {
+    const total = Math.min(CATCHUP_MAX_TICKS, Math.floor((Math.max(0, elapsedMs) / 1000) * TICK_RATE))
+    this.catchup = total > 0 ? { total, done: 0, startedAt: now(), maxMs: CATCHUP_MAX_MS } : null
+    return total
+  }
+
+  /**
+   * Avance le rattrapage d'une tranche de `sliceMs`. Termine si tous les ticks sont faits,
+   * si le temps maximal est atteint, ou si le monde est vide.
+   */
+  stepCatchup(sliceMs: number, now: () => number = () => performance.now()) {
+    const c = this.catchup
+    if (!c) return { done: 0, total: 0, finished: true }
+    const start = now()
+    while (c.done < c.total) {
+      this.engine.tick()
+      c.done++
+      if ((c.done & 31) === 0) {
+        const t = now()
+        if (t - start > sliceMs || t - c.startedAt > c.maxMs) break
+      }
+    }
+    const finished = c.done >= c.total || now() - c.startedAt > c.maxMs || this.engine.creature_count() === 0
+    const res = { done: c.done, total: c.total, finished }
+    if (finished) this.catchup = null
+    return res
+  }
+
+  skipCatchup() {
+    this.catchup = null
   }
 
   /** Reprend une sauvegarde ; false (monde inchangé ou vide) si elle est invalide. */

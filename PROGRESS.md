@@ -29,14 +29,14 @@
 ### Phase 4 — Persistance IndexedDB + rattrapage hors-ligne
 - [x] 4.1 `src/persist/store.ts` : interface `SaveStore` + implémentation IndexedDB (une base `life-simulator`, store `saves`, clé `main`, + `meta`) + implémentation mémoire pour les tests unitaires
 - [x] 4.2 Worker : commandes `save`/`load` (takeSnapshot/restoreSnapshot), autosave toutes les ~10 s et sur `visibilitychange`/`pagehide`, reprise au démarrage (sinon nouveau monde)
-- [ ] 4.3 Rattrapage hors-ligne : temps écoulé depuis la dernière sauvegarde simulé en rafale (ticks sans rendu, plafonné ~5 min de calcul), barre de progression
+- [x] 4.3 Rattrapage hors-ligne : temps écoulé depuis la dernière sauvegarde simulé en rafale (ticks sans rendu, plafonné ~5 min de calcul), barre de progression
 - [ ] 4.4 Export/import fichier + bouton « Nouveau monde » (graine), e2e « recharge la page → même monde »
 ### Phase 5 — Mode Dieu & UI
 ### Phase 6 — Intelligence avancée (structure évolutive, apprentissage, paliers)
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 4.3 : rattrapage hors-ligne — à la reprise, `elapsed = now - meta.savedAt` ; le worker simule en rafale `min(elapsed_s * 30, cap)` ticks sans rendu (plafond ≈ 5 min de calcul, par tranches de ~20 ms pour rester réactif) et émet `{type:'catchup', done, total}` ; barre de progression dans l'UI ; test controller (ticks avancés = attendu, plafonné) + e2e.
+Phase 4.4 : export/import de la sauvegarde en fichier (.life) + bouton « Nouveau monde » (efface le cache, nouvelle graine, confirmation) ; e2e export→import. Optionnel : rattrapage au retour d'onglet masqué (hidden > 5 s).
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -47,6 +47,7 @@ Phase 4.3 : rattrapage hors-ligne — à la reprise, `elapsed = now - meta.saved
 (aucun)
 
 ## Journal
+- 4.3 fait : `TICK_RATE=30`, plafonds 60 s de calcul / 300 000 ticks, `SimController.beginCatchup/stepCatchup/skipCatchup` (tranches de 20 ms, horloge injectable, arrêt si monde vide), worker en mode rattrapage (pas de frames, messages `catchup`), UI barre de progression + bouton « Passer ». e2e : sauvegarde vieillie de 20 s → tick > 500 après reprise. Vitest 22 + e2e 5 verts. Limite : la vitesse/pause d'avant n'est pas mémorisée (reprise en ×1).
 - 4.2 fait : protocole `init.snapshot`/`save`/`snapshot`, `SimController.snapshot/restore`, store Pinia (chargement IndexedDB au démarrage, autosave 10 s, `visibilitychange`→hidden et `pagehide`, état `savedAt/saveError/persistent/restored`), bouton « Sauvegarder », graine aléatoire pour un nouveau monde. e2e `resume.spec.ts` : recharge la page → « Monde repris », tick ≥ celui sauvegardé. Limite connue : `pagehide` est « best effort » (aller-retour worker) ; l'autosave 10 s couvre le reste. À optimiser plus tard : taille du snapshot (génomes complets, jusqu'à ~15 Mo à 20 000 créatures). Vitest 21 + e2e 4 verts.
 - 4.1 fait : `persist/store.ts` (SaveStore, MemoryStore, IdbStore, `createSaveStore` avec repli sans exception). Décision : l'IndexedDB est utilisée côté thread principal (le worker transfère le snapshot) pour que `pagehide` puisse écrire. Tests : Vitest (mémoire + repli) + e2e IndexedDB réel via import dynamique du serveur de dev. Vitest 20 + e2e 3 verts.
 - 3.4 fait : naissance moins facile (enfant 25 < coût 45 : plus d'énergie créée, maturité 300 ticks). Résultats `balance_report` : herbivores seuls 600→900 puis lente décrue vers ~150 (6000 ticks) ; avec carnivores oscillations Lotka-Volterra ~5000 ticks puis effondrement. Test anti-boom (max < 2500). ATTENTION objectif central : l'intelligence moyenne (hidden ≈ 4,0) ne monte pas encore → priorité phase 6 (pression de sélection, apprentissage, mutations structurelles plus utiles). Phase 3 terminée.

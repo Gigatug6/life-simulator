@@ -15,6 +15,12 @@ const post = (m: FromWorker, transfer: Transferable[] = []) => postMessage(m, tr
 
 function loop() {
   if (!sim) return
+  if (sim.catchingUp) {
+    const r = sim.stepCatchup(20)
+    post({ type: 'catchup', ...r })
+    timer = setTimeout(loop, 0) // laisse passer les messages (« passer », sauvegarde)
+    return
+  }
   const t0 = performance.now()
   const ticks = sim.advance(BUDGET_MS)
   const frame = sim.frame()
@@ -35,12 +41,15 @@ self.onmessage = async (e: MessageEvent<ToWorker>) => {
       sim = new SimController(engine)
       const restored = !!msg.snapshot && sim.restore(msg.snapshot)
       if (!restored) sim.init(msg.seed, msg.w, msg.h, msg.herbivores, msg.carnivores)
+      if (restored && msg.elapsedMs && msg.elapsedMs > 5000) sim.beginCatchup(msg.elapsedMs)
       post({ type: 'ready', version: engine.version(), restored })
       const t = sim.terrain()
       post({ type: 'terrain', ...t }, [t.biome.buffer])
       loop()
     } else if (!sim) {
       return
+    } else if (msg.type === 'skipCatchup') {
+      sim.skipCatchup()
     } else if (msg.type === 'save') {
       const snap = sim.snapshot()
       post({ type: 'snapshot', ...snap }, [snap.data.buffer])

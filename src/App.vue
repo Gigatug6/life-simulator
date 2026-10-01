@@ -15,6 +15,11 @@ const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
   <main class="hud">
     <h1>Simulateur de vie</h1>
     <p data-testid="status">{{ world.status }}</p>
+    <p v-if="world.catchup" data-testid="catchup">
+      Rattrapage du temps écoulé… {{ Math.round((100 * world.catchup.done) / world.catchup.total) }} %
+      <progress :value="world.catchup.done" :max="world.catchup.total"></progress>
+      <button @click="world.skipCatchup()">Passer</button>
+    </p>
     <template v-if="world.frame">
       <p data-testid="ticks">Tick : {{ world.frame.tick }} · {{ SEASONS[world.frame.season] }}</p>
       <p data-testid="population">

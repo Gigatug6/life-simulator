@@ -13,6 +13,7 @@ export const useWorldStore = defineStore('world', () => {
   const frame = shallowRef<Frame | null>(null)
   const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array } | null>(null)
   const restored = ref(false)
+  const catchup = ref<{ done: number; total: number } | null>(null)
   const savedAt = ref<number | null>(null)
   const saveError = ref<string | null>(null)
   const persistent = ref(false)
@@ -37,8 +38,11 @@ export const useWorldStore = defineStore('world', () => {
     saveStore = createSaveStore()
     persistent.value = saveStore.persistent
     let snapshot: Uint8Array | undefined
+    let elapsedMs = 0
     try {
-      snapshot = (await saveStore.load())?.data
+      const rec = await saveStore.load()
+      snapshot = rec?.data
+      elapsedMs = rec ? Math.max(0, Date.now() - rec.meta.savedAt) : 0
     } catch (err) {
       saveError.value = `Lecture de la sauvegarde impossible : ${err}`
     }
@@ -56,6 +60,8 @@ export const useWorldStore = defineStore('world', () => {
       else if (m.type === 'frame') {
         frame.value = markRaw(m.frame)
         ticksPerSecond.value = m.ticksPerSecond
+      } else if (m.type === 'catchup') {
+        catchup.value = m.finished ? null : { done: m.done, total: m.total }
       } else if (m.type === 'snapshot') {
         const store = saveStore
         store
@@ -67,7 +73,7 @@ export const useWorldStore = defineStore('world', () => {
           .catch((err) => (saveError.value = `Sauvegarde impossible : ${err}`))
       } else if (m.type === 'error') status.value = `Erreur : ${m.message}`
     }
-    send({ type: 'init', seed, w, h, herbivores: 400, carnivores: 20, snapshot })
+    send({ type: 'init', seed, w, h, herbivores: 400, carnivores: 20, snapshot, elapsedMs })
   }
 
   function stop() {
@@ -78,6 +84,7 @@ export const useWorldStore = defineStore('world', () => {
     worker?.terminate()
     worker = null
     ready.value = false
+    catchup.value = null
   }
 
   function setSpeed(s: Speed) {
@@ -86,8 +93,9 @@ export const useWorldStore = defineStore('world', () => {
   }
 
   return {
-    status, ready, speed, ticksPerSecond, frame, terrain, restored, savedAt, saveError, persistent,
+    status, ready, speed, ticksPerSecond, frame, terrain, restored, catchup, savedAt, saveError, persistent,
     start, stop, setSpeed, save,
+    skipCatchup: () => send({ type: 'skipCatchup' }),
     spawn: (x: number, y: number, species: number, count: number) => send({ type: 'spawn', x, y, species, count }),
     rain: (value: number) => send({ type: 'rain', value }),
   }

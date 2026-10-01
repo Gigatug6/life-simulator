@@ -19,3 +19,23 @@ test('recharger la page reprend le même monde depuis le cache du navigateur', a
   await expect.poll(() => tickOf(page)).toBeGreaterThanOrEqual(before)
   expect(await tickOf(page)).toBeLessThan(before + 200) // pas un nouveau monde à 0, ni un bond
 })
+
+test('un monde sauvegardé il y a longtemps est rattrapé en rafale à la reprise', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
+  await page.getByRole('button', { name: 'Pause' }).click()
+  await page.getByRole('button', { name: 'Sauvegarder' }).click()
+  await expect(page.getByTestId('saved')).toContainText('Sauvegardé à')
+  // vieillit la sauvegarde de 20 s (≈ 600 ticks à rattraper)
+  await page.evaluate(async () => {
+    const path = '/src/persist/store.ts'
+    const { createSaveStore } = (await import(/* @vite-ignore */ path)) as typeof import('../src/persist/store')
+    const store = createSaveStore()
+    const rec = (await store.load())!
+    await store.save(rec.data, { ...rec.meta, savedAt: rec.meta.savedAt - 20_000 })
+  })
+  await page.reload()
+  await expect(page.getByTestId('status')).toContainText('Monde repris')
+  // le monde a avancé d'au moins ~500 ticks sans que l'on ait attendu
+  await expect.poll(() => tickOf(page), { timeout: 20_000 }).toBeGreaterThan(500)
+})
