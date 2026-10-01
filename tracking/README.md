@@ -14,5 +14,5 @@ Chaque conversation (chat) avec l'agent a **son propre fichier de suivi** ici. O
 
 | N° | Fichier | Sujet | Statut |
 |---|---|---|---|
-| 01 | [`01-simulateur-initial.md`](01-simulateur-initial.md) | Construction du simulateur : Docker, WASM, rendu 2D, persistance, mode Dieu, intelligence, GitHub Pages | terminé |
-| 02 | [`02-mode-3d-evolution.md`](02-mode-3d-evolution.md) | Mode 3D, évolution physique des créatures, nouveaux neurones, effets visuels | en cours |
+| 01 | [`01-initial-simulator.md`](01-initial-simulator.md) | Construction du simulateur : Docker, WASM, rendu 2D, persistance, mode Dieu, intelligence, GitHub Pages | terminé |
+| 02 | [`02-3d-mode-evolution.md`](02-3d-mode-evolution.md) | Mode 3D, évolution physique des créatures, nouveaux neurones, effets visuels | en cours |

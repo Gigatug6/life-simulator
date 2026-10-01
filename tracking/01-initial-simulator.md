@@ -1,7 +1,7 @@
 # 01 — Simulateur de vie : construction initiale (chat n°1)
 
-> Fichier d'historique : **ne plus le modifier** (sauf lien vers la suite). Statut : terminé. Suite : [`02-mode-3d-evolution.md`](02-mode-3d-evolution.md).
-> (Il s'appelait `PROGRESS.md` à la racine avant l'introduction du dossier `suivi/`.)
+> Fichier d'historique : **ne plus le modifier** (sauf lien vers la suite). Statut : terminé. Suite : [`02-3d-mode-evolution.md`](02-3d-mode-evolution.md).
+> (Il s'appelait `PROGRESS.md` à la racine avant l'introduction du dossier `tracking/`.)
 
 
 ## Statut

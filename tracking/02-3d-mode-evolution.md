@@ -1,13 +1,15 @@
 # 02 — Mode 3D, évolution physique, nouveaux neurones, effets visuels (chat n°2)
 
-> Chat du 2026-10-01. Statut : **en cours**. Précédent : [`01-simulateur-initial.md`](01-simulateur-initial.md).
+> Chat du 2026-10-01. Statut : **en cours**. Précédent : [`01-initial-simulator.md`](01-initial-simulator.md).
 
 ## Objectif
 Demande de l'utilisateur : « ajouter un **mode 3D**, ajouter des **évolutions physiques** aux créatures, des **nouveaux neurones**, des éléments qui donnent une **claque visuelle** » — en autonomie. Plus : un **dossier de suivi** avec un fichier par chat (ce dossier), indiqué dans le README et `CLAUDE.md`.
 
 ## Checklist
 ### S — Suivi
-- [x] S.1 Dossier `suivi/` (convention, index, modèle), ancien `PROGRESS.md` archivé, README et `CLAUDE.md` mis à jour
+- [x] S.1 Dossier `tracking/` (convention, index, modèle), ancien `PROGRESS.md` archivé, README et `CLAUDE.md` mis à jour
+
+- [ ] S.2 Demande utilisateur : noms de dossiers/fichiers et **commentaires de code en anglais** (dossier `tracking/` → `tracking/`, traduction de tous les commentaires et titres de tests ; l'UI reste en français)
 
 ### E — Évolution physique des créatures
 - [ ] E.1 Traits physiques héréditaires et mutables (taille, vitesse, vision, teinte de lignée) en Rust + snapshot v5 + inspecteur + rendu 2D
@@ -29,12 +31,13 @@ Demande de l'utilisateur : « ajouter un **mode 3D**, ajouter des **évolutions 
 E.1 — traits physiques héréditaires.
 
 ## Décisions
-- Un fichier de suivi **par chat**, dans `suivi/` (demande utilisateur). L'ancien `PROGRESS.md` devient `suivi/01-simulateur-initial.md`.
+- Un fichier de suivi **par chat**, dans `tracking/` (demande utilisateur). L'ancien `PROGRESS.md` devient `tracking/01-initial-simulator.md`.
 - 3D avec three.js déjà présent (aucune nouvelle dépendance : `OrbitControls`, `EffectComposer`, `UnrealBloomPass` viennent de `three/examples`).
 - Le mode 2D reste disponible (bascule 2D/3D).
+- Langue (demande utilisateur) : dossiers, fichiers, code, commentaires et titres de tests en **anglais** ; interface et documentation en français. Le dossier `tracking/` a été renommé `tracking/`.
 
 ## Limites connues
 (à compléter)
 
 ## Journal
-- S.1 fait : création de `suivi/` (README avec règles et index, `_modele.md`), `PROGRESS.md` → `suivi/01-simulateur-initial.md` (déplacé avec `git mv`, historique conservé), fichier du chat n°2 créé.
+- S.1 fait : création de `tracking/` (README avec règles et index, `_modele.md`), `PROGRESS.md` → `tracking/01-initial-simulator.md` (déplacé avec `git mv`, historique conservé), fichier du chat n°2 créé.
