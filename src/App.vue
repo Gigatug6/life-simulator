@@ -3,6 +3,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { useWorldStore } from './stores/world'
 import { SPEEDS } from './sim/protocol'
 import WorldView from './components/WorldView.vue'
+import GodTools from './components/GodTools.vue'
 
 const world = useWorldStore()
 onMounted(() => world.start())
@@ -21,6 +22,7 @@ const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
 
 <template>
   <WorldView />
+  <GodTools />
   <main class="hud">
     <h1>Simulateur de vie</h1>
     <p data-testid="status">{{ world.status }}</p>

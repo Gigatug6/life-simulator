@@ -72,6 +72,52 @@ impl Env<'_> {
     }
 }
 
+/// Météorite : tue toute créature dans le rayon et brûle l'herbe. Renvoie le nombre de morts.
+pub fn meteor(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
+    let r2 = r * r;
+    let mut killed = 0;
+    for i in (0..c.count).rev() {
+        let (dx, dy) = (c.x[i] - x, c.y[i] - y);
+        if dx * dx + dy * dy <= r2 {
+            c.kill(i);
+            killed += 1;
+        }
+    }
+    for_cells(env, x, y, r, |env, idx| env.grass[idx] = 0.0);
+    killed
+}
+
+/// Bénédiction : énergie au maximum et herbe luxuriante dans le rayon. Renvoie le nombre de bénies.
+pub fn bless(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
+    let r2 = r * r;
+    let mut n = 0;
+    for i in 0..c.count {
+        let (dx, dy) = (c.x[i] - x, c.y[i] - y);
+        if dx * dx + dy * dy <= r2 {
+            c.energy[i] = MAX_ENERGY;
+            n += 1;
+        }
+    }
+    for_cells(env, x, y, r, |env, idx| env.grass[idx] = crate::plants::capacity(env.biome[idx]));
+    n
+}
+
+/// Applique `f` à chaque cellule dont le centre est dans le disque (x, y, r).
+fn for_cells<F: FnMut(&mut Env, usize)>(env: &mut Env, x: f32, y: f32, r: f32, mut f: F) {
+    let x0 = (x - r).max(0.0) as usize;
+    let y0 = (y - r).max(0.0) as usize;
+    let x1 = ((x + r) as usize + 1).min(env.w);
+    let y1 = ((y + r) as usize + 1).min(env.h);
+    for cy in y0..y1 {
+        for cx in x0..x1 {
+            let (dx, dy) = (cx as f32 + 0.5 - x, cy as f32 + 0.5 - y);
+            if dx * dx + dy * dy <= r * r {
+                f(env, cy * env.w + cx);
+            }
+        }
+    }
+}
+
 /// Nombre de créatures d'une espèce.
 pub fn count_species(c: &Creatures, species: u8) -> usize {
     (0..c.count).filter(|&i| c.species[i] == species).count()
@@ -246,6 +292,37 @@ mod tests {
             let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
             step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
         }
+    }
+
+    #[test]
+    fn meteor_kills_inside_only_and_burns_grass() {
+        let mut s = sim(6, 0);
+        let g = [0.0; GENOME_LEN];
+        s.c.spawn(50.0, 50.0, 0.0, 50.0, HERBIVORE, 0, &g);
+        s.c.spawn(53.0, 50.0, 0.0, 50.0, HERBIVORE, 0, &g);
+        s.c.spawn(90.0, 90.0, 0.0, 50.0, HERBIVORE, 0, &g);
+        s.grass.iter_mut().for_each(|v| *v = 0.7);
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        assert_eq!(meteor(&mut s.c, &mut env, 50.0, 50.0, 5.0), 2);
+        assert_eq!(s.c.count, 1);
+        assert_eq!(s.c.x[0], 90.0);
+        assert_eq!(s.grass[50 * W + 50], 0.0);
+        assert_eq!(s.grass[90 * W + 90], 0.7);
+    }
+
+    #[test]
+    fn bless_fills_energy_and_grass() {
+        let mut s = sim(6, 0);
+        let g = [0.0; GENOME_LEN];
+        s.c.spawn(50.0, 50.0, 0.0, 5.0, HERBIVORE, 0, &g);
+        s.c.spawn(100.0, 100.0, 0.0, 5.0, HERBIVORE, 0, &g);
+        s.grass.iter_mut().for_each(|v| *v = 0.0);
+        s.biome[50 * W + 50] = world::PLAIN;
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        assert_eq!(bless(&mut s.c, &mut env, 50.0, 50.0, 4.0), 1);
+        assert_eq!(s.c.energy[0], MAX_ENERGY);
+        assert_eq!(s.c.energy[1], 5.0);
+        assert_eq!(s.grass[50 * W + 50], 1.0);
     }
 
     #[test]

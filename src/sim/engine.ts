@@ -12,6 +12,8 @@ export interface LifeExports {
   world_season(): number
   world_daylight(): number
   world_set_rain(v: number): void
+  world_meteor(x: number, y: number, r: number): number
+  world_bless(x: number, y: number, r: number): number
   world_seed(): number
   world_tick(): number
   world_rain(): number

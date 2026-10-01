@@ -56,6 +56,8 @@ self.onmessage = async (e: MessageEvent<ToWorker>) => {
     } else if (msg.type === 'setSpeed') sim.speed = msg.speed
     else if (msg.type === 'spawn') sim.spawn(msg.x, msg.y, msg.species, msg.count)
     else if (msg.type === 'rain') sim.rain(msg.value)
+    else if (msg.type === 'meteor') sim.meteor(msg.x, msg.y, msg.r)
+    else if (msg.type === 'bless') sim.bless(msg.x, msg.y, msg.r)
   } catch (err) {
     post({ type: 'error', message: String(err) })
   }

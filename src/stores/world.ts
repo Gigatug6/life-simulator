@@ -159,5 +159,7 @@ export const useWorldStore = defineStore('world', () => {
     skipCatchup: () => send({ type: 'skipCatchup' }),
     spawn: (x: number, y: number, species: number, count: number) => send({ type: 'spawn', x, y, species, count }),
     rain: (value: number) => send({ type: 'rain', value }),
+    meteor: (x: number, y: number, r: number) => send({ type: 'meteor', x, y, r }),
+    bless: (x: number, y: number, r: number) => send({ type: 'bless', x, y, r }),
   }
 })

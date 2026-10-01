@@ -41,15 +41,18 @@ pub fn daylight(tick: u32) -> f32 {
     tri(p)
 }
 
-/// Fait avancer la repousse de l'herbe d'un tick. `rain` dans [0,1].
+/// Fait avancer la repousse de l'herbe d'un tick. `rain` dans [-1,1] : positif = pluie
+/// (croissance accélérée), négatif = sécheresse (croissance nulle puis herbe qui meurt).
 pub fn step(grass: &mut [f32], biome: &[u8], n: usize, tick: u32, rain: f32) {
-    let rate = 0.004 * STRIDE as f32 * season_factor(tick) * (1.0 + 2.0 * rain);
+    let boost = 1.0 + 2.0 * rain;
+    let rate = 0.004 * STRIDE as f32 * season_factor(tick) * if boost > 0.0 { boost } else { 0.0 };
+    let wither = if rain < 0.0 { -rain * 0.004 * STRIDE as f32 } else { 0.0 };
     let mut i = (tick % STRIDE) as usize;
     while i < n {
         let cap = capacity(biome[i]);
         if cap > 0.0 {
             let g = grass[i];
-            let ng = g + rate * (g + 0.02) * (1.0 - g / cap);
+            let ng = g + rate * (g + 0.02) * (1.0 - g / cap) - g * wither;
             grass[i] = if ng > cap { cap } else { ng };
         }
         i += STRIDE as usize;
@@ -79,6 +82,16 @@ mod tests {
     fn day_and_night() {
         assert!(daylight(DAY_LEN / 2) > 0.95);
         assert!(daylight(0) < 0.05);
+    }
+
+    #[test]
+    fn drought_withers_grass() {
+        let biome = vec![PLAIN; 4];
+        let mut g = vec![0.8f32; 4];
+        for t in 0..800 {
+            step(&mut g, &biome, 4, t, -1.0);
+        }
+        assert!(g[0] < 0.1, "{}", g[0]);
     }
 
     #[test]

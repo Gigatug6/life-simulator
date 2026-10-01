@@ -32,7 +32,7 @@
 - [x] 4.3 Rattrapage hors-ligne : temps écoulé depuis la dernière sauvegarde simulé en rafale (ticks sans rendu, plafonné ~5 min de calcul), barre de progression
 - [x] 4.4 Export/import fichier + bouton « Nouveau monde » (graine), e2e « recharge la page → même monde »
 ### Phase 5 — Mode Dieu & UI
-- [ ] 5.1 Barre d'outils « Dieu » : semer des herbivores/carnivores au clic, pluie, sécheresse, météorite, bénédiction (énergie) ; commandes worker + curseur en conséquence
+- [x] 5.1 Barre d'outils « Dieu » : semer des herbivores/carnivores au clic, pluie, sécheresse, météorite, bénédiction (énergie) ; commandes worker + curseur en conséquence
 - [ ] 5.2 Inspecteur : clic sur une créature → énergie, âge, génération, neurones cachés, mini-visualisation du cerveau
 - [ ] 5.3 Courbes : population par espèce + indice d'intelligence dans le temps (historique stocké dans le snapshot ou localStorage)
 - [ ] 5.4 HUD propre (remplace l'overlay de debug), réglages, mobile/tactile
@@ -40,7 +40,7 @@
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 5.1 : barre d'outils « Dieu » — outils semer herbivore/carnivore, pluie, sécheresse, météorite (tue les créatures dans un rayon + herbe brûlée), bénédiction (énergie max dans un rayon) ; nouvelles commandes worker (`spawn` existe, `rain` existe, ajouter `meteor`, `bless`, `drought` côté Rust : `world_meteor(x,y,r)`, `world_bless(x,y,r)`), clic sur le canvas converti en coordonnées monde (`ViewState.screenToWorld`), curseur de rayon, tests cargo + e2e.
+Phase 5.2 : inspecteur — outil « Inspecter » : clic sur une créature → sélection (id stable) ; le worker renvoie `selected` (x, y, énergie, âge, génération, espèce, neurones cachés, poids du génome) à chaque frame ; panneau avec mini-visualisation du réseau ; anneau de surbrillance dans le rendu ; test controller + e2e.
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -51,6 +51,7 @@ Phase 5.1 : barre d'outils « Dieu » — outils semer herbivore/carnivore, plui
 (aucun)
 
 ## Journal
+- 5.1 fait : Rust `life::meteor/bless` (+ `for_cells`), `world_meteor/world_bless`, pluie/sécheresse (`world_set_rain` ∈ [-1,1], `plants::step` : croissance nulle puis flétrissement), commandes worker `meteor/bless`, `Renderer.onWorldClick` (clic ≠ glisser), stores `god` (outil, rayon, message) + `GodTools.vue` (barre du bas). cargo 28, Vitest 24, e2e 7 verts (outils, météo, glisser sans effet). Note : un rayon de 40 couvre ~8 % de la carte 256².
 - 4.4 fait : `snapshotInfo` (lecture/validation d'en-tête), store `exportFile` (téléchargement `monde-<seed hex>-t<tick>.life`), `importFile` (valide, écrit dans le cache, redémarre sur ce monde, erreur si invalide), `newWorld` (confirmation, efface le cache). Bug réel corrigé : `world_seed()` revenait signé (u32 → i32 JS) → `>>> 0` dans `SimController.snapshot`. start() réinitialise status/frame/catchup. e2e export → nouveau monde → import → même tick (stable 3×). Vitest 23 + e2e 6 verts. Phase 4 terminée.
 - 4.3 fait : `TICK_RATE=30`, plafonds 60 s de calcul / 300 000 ticks, `SimController.beginCatchup/stepCatchup/skipCatchup` (tranches de 20 ms, horloge injectable, arrêt si monde vide), worker en mode rattrapage (pas de frames, messages `catchup`), UI barre de progression + bouton « Passer ». e2e : sauvegarde vieillie de 20 s → tick > 500 après reprise. Vitest 22 + e2e 5 verts. Limite : la vitesse/pause d'avant n'est pas mémorisée (reprise en ×1).
 - 4.2 fait : protocole `init.snapshot`/`save`/`snapshot`, `SimController.snapshot/restore`, store Pinia (chargement IndexedDB au démarrage, autosave 10 s, `visibilitychange`→hidden et `pagehide`, état `savedAt/saveError/persistent/restored`), bouton « Sauvegarder », graine aléatoire pour un nouveau monde. e2e `resume.spec.ts` : recharge la page → « Monde repris », tick ≥ celui sauvegardé. Limite connue : `pagehide` est « best effort » (aller-retour worker) ; l'autosave 10 s couvre le reste. À optimiser plus tard : taille du snapshot (génomes complets, jusqu'à ~15 Mo à 20 000 créatures). Vitest 21 + e2e 4 verts.

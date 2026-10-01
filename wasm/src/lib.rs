@@ -311,10 +311,40 @@ pub extern "C" fn world_daylight() -> f32 {
     unsafe { plants::daylight(TICKS) }
 }
 
-/// Déclenche la pluie (intensité 0..1) — outil de « Dieu ».
+/// Pluie (0..1) ou sécheresse (-1..0) — outil de « Dieu » ; s'estompe lentement.
 #[no_mangle]
 pub extern "C" fn world_set_rain(v: f32) {
-    unsafe { RAIN = if v < 0.0 { 0.0 } else if v > 1.0 { 1.0 } else { v } }
+    unsafe { RAIN = if v < -1.0 { -1.0 } else if v > 1.0 { 1.0 } else { v } }
+}
+
+/// Météorite en (x, y) de rayon r (cellules) : renvoie le nombre de créatures tuées.
+#[no_mangle]
+pub extern "C" fn world_meteor(x: f32, y: f32, r: f32) -> u32 {
+    unsafe {
+        if WIDTH == 0 {
+            return 0;
+        }
+        let n = (WIDTH * HEIGHT) as usize;
+        let grass = &mut *core::ptr::addr_of_mut!(GRASS);
+        let bio = &*core::ptr::addr_of!(BIOME);
+        let mut env = life::Env { w: WIDTH as usize, h: HEIGHT as usize, biome: &bio[..n], grass: &mut grass[..n], daylight: 1.0 };
+        life::meteor(&mut *core::ptr::addr_of_mut!(CREATURES), &mut env, x, y, r)
+    }
+}
+
+/// Bénédiction en (x, y) de rayon r : renvoie le nombre de créatures bénies.
+#[no_mangle]
+pub extern "C" fn world_bless(x: f32, y: f32, r: f32) -> u32 {
+    unsafe {
+        if WIDTH == 0 {
+            return 0;
+        }
+        let n = (WIDTH * HEIGHT) as usize;
+        let grass = &mut *core::ptr::addr_of_mut!(GRASS);
+        let bio = &*core::ptr::addr_of!(BIOME);
+        let mut env = life::Env { w: WIDTH as usize, h: HEIGHT as usize, biome: &bio[..n], grass: &mut grass[..n], daylight: 1.0 };
+        life::bless(&mut *core::ptr::addr_of_mut!(CREATURES), &mut env, x, y, r)
+    }
 }
 
 #[cfg(test)]

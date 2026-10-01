@@ -2,13 +2,16 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { Renderer } from '../render/Renderer'
 import { useWorldStore } from '../stores/world'
+import { useGodStore } from '../stores/god'
 
 const world = useWorldStore()
+const god = useGodStore()
 const canvas = ref<HTMLCanvasElement | null>(null)
 let renderer: Renderer | null = null
 
 onMounted(() => {
   renderer = new Renderer(canvas.value!)
+  renderer.onWorldClick = (x, y) => god.apply(x, y)
   if (world.terrain) renderer.setTerrain(world.terrain.w, world.terrain.h, world.terrain.biome)
 })
 onUnmounted(() => renderer?.dispose())

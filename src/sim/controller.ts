@@ -115,6 +115,14 @@ export class SimController {
     }
   }
 
+  meteor(x: number, y: number, r: number) {
+    return this.engine.world_meteor(x, y, r)
+  }
+
+  bless(x: number, y: number, r: number) {
+    return this.engine.world_bless(x, y, r)
+  }
+
   rain(value: number) {
     this.engine.world_set_rain(value)
   }

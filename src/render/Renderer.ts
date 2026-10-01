@@ -26,6 +26,9 @@ export class Renderer {
   private pointers = new Map<number, { x: number; y: number }>()
   private pinchDist = 0
   private cleanup: Array<() => void> = []
+  private downAt: { x: number; y: number; t: number } | null = null
+  /** Appelé sur un clic (sans glisser) avec les coordonnées du monde en cellules. */
+  onWorldClick: ((x: number, y: number) => void) | null = null
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true })
@@ -160,6 +163,7 @@ export class Renderer {
       c.setPointerCapture(e.pointerId)
       this.pointers.set(e.pointerId, local(e))
       this.pinchDist = this.pointerDistance()
+      this.downAt = this.pointers.size === 1 ? { ...local(e), t: performance.now() } : null
     })
     on('pointermove', (e) => {
       const prev = this.pointers.get(e.pointerId)
@@ -178,6 +182,15 @@ export class Renderer {
       this.dirty = true
     })
     const up = (e: PointerEvent) => {
+      const d = this.downAt
+      if (d && e.type === 'pointerup' && this.pointers.size === 1) {
+        const p = local(e)
+        if (Math.hypot(p.x - d.x, p.y - d.y) < 5 && performance.now() - d.t < 400) {
+          const w = this.view.screenToWorld(p.x, p.y)
+          this.onWorldClick?.(w.x, w.y)
+        }
+      }
+      this.downAt = null
       this.pointers.delete(e.pointerId)
       this.pinchDist = 0
     }

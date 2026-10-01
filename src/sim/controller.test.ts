@@ -85,4 +85,18 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     sim.beginCatchup(3600_000, () => (t += 100_000))
     expect(sim.stepCatchup(5, () => (t += 100_000)).finished).toBe(true)
   })
+
+  it('météorite, bénédiction et sécheresse', async () => {
+    const sim = await make()
+    const total = sim.frame().count
+    expect(sim.meteor(64, 64, 200)).toBe(total) // rayon couvrant tout le monde
+    expect(sim.frame().count).toBe(0)
+    sim.spawn(60, 60, 0, 3)
+    sim.engine.creature_spawn(10, 10, 0)
+    expect(sim.bless(60, 60, 5)).toBeGreaterThan(0)
+    sim.rain(-1)
+    expect(sim.engine.world_rain()).toBe(-1)
+    sim.rain(-5) // borné
+    expect(sim.engine.world_rain()).toBe(-1)
+  })
 })

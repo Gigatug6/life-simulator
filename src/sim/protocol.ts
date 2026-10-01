@@ -25,7 +25,9 @@ export type ToWorker =
   | { type: 'save' }
   | { type: 'setSpeed'; speed: Speed }
   | { type: 'spawn'; x: number; y: number; species: number; count: number }
-  | { type: 'rain'; value: number }
+  | { type: 'rain'; value: number } // -1 (sécheresse) .. 1 (pluie)
+  | { type: 'meteor'; x: number; y: number; r: number }
+  | { type: 'bless'; x: number; y: number; r: number }
 
 /** Image envoyée à l'UI (buffers transférés, jamais partagés). */
 export interface Frame {
