@@ -45,7 +45,7 @@ const SERIES_IQ = computed(() => [
   padding: .7rem .8rem .2rem;
   background: var(--surface);
   border-radius: 8px;
-  margin-top: .5rem;
-  pointer-events: auto;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 </style>

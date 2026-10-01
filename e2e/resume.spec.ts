@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test'
 
+const openMenu = async (page: import('@playwright/test').Page) => {
+  if (!(await page.getByTestId('menu').isVisible())) await page.getByTestId('menu-toggle').click()
+}
+
 const tickOf = async (page: import('@playwright/test').Page) =>
   Number(/Tick : (\d+)/.exec((await page.getByTestId('ticks').textContent()) ?? '')?.[1])
 
@@ -11,7 +15,8 @@ test('recharger la page reprend le même monde depuis le cache du navigateur', a
   await page.getByRole('button', { name: 'Pause' }).click()
   await page.waitForTimeout(200)
   const before = await tickOf(page)
-  await page.getByRole('button', { name: 'Sauvegarder' }).click()
+  await page.getByTestId('menu-toggle').click()
+  await page.getByRole('menuitem', { name: 'Sauvegarder' }).click()
   await expect(page.getByTestId('saved')).toContainText('Sauvegardé à')
 
   await page.reload()
@@ -24,7 +29,8 @@ test('un monde sauvegardé il y a longtemps est rattrapé en rafale à la repris
   await page.goto('/')
   await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
   await page.getByRole('button', { name: 'Pause' }).click()
-  await page.getByRole('button', { name: 'Sauvegarder' }).click()
+  await page.getByTestId('menu-toggle').click()
+  await page.getByRole('menuitem', { name: 'Sauvegarder' }).click()
   await expect(page.getByTestId('saved')).toContainText('Sauvegardé à')
   // vieillit la sauvegarde de 20 s (≈ 600 ticks à rattraper)
   await page.evaluate(async () => {
@@ -50,19 +56,22 @@ test('exporter, créer un nouveau monde puis réimporter le fichier retrouve le 
   await page.waitForTimeout(200)
   const exportedTick = await tickOf(page)
 
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export').click()])
+  const [download] = await Promise.all([page.waitForEvent('download'), openMenu(page).then(() => page.getByTestId('export').click())])
   expect(download.suggestedFilename()).toMatch(/^monde-[0-9a-f]+-t\d+\.life$/)
   const path = await download.path()
 
+  await openMenu(page)
   await page.getByTestId('new-world').click()
   // le monde est remplacé (la boîte de confirmation est traitée de façon asynchrone)
   await expect.poll(() => tickOf(page)).toBeLessThan(exportedTick)
 
+  await openMenu(page)
   await page.getByTestId('import-input').setInputFiles(path)
   await expect(page.getByTestId('status')).toContainText('Monde repris')
   await expect.poll(() => tickOf(page)).toBeGreaterThanOrEqual(exportedTick)
   await expect(page.getByTestId('save-error')).toHaveCount(0)
 
+  await openMenu(page)
   // un fichier invalide est refusé sans casser le monde
   await page.getByTestId('import-input').setInputFiles({ name: 'x.life', mimeType: 'application/octet-stream', buffer: Buffer.from('nimportequoi') })
   await expect(page.getByTestId('save-error')).toContainText('pas une sauvegarde valide')

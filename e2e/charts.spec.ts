@@ -18,7 +18,8 @@ test("les courbes d'évolution se remplissent et survivent au rechargement", asy
   await page.screenshot({ path: 'artifacts/screens/charts.png' })
 
   await page.getByRole('button', { name: 'Pause' }).click()
-  await page.getByRole('button', { name: 'Sauvegarder' }).click()
+  await page.getByTestId('menu-toggle').click()
+  await page.getByRole('menuitem', { name: 'Sauvegarder' }).click()
   await expect(page.getByTestId('saved')).toContainText('Sauvegardé à')
   const n = await page.locator('[data-testid="chart-population"] path').first().getAttribute('d').then((d) => (d ?? '').split('L').length)
   await page.reload()

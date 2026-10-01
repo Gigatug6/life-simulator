@@ -29,7 +29,8 @@ const god = useGodStore()
 </template>
 
 <style scoped>
-.tools { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: center; padding: .6rem .8rem; max-width: 100vw; background: rgba(7, 13, 10, 0.78); border-top-left-radius: 10px; border-top-right-radius: 10px; font-size: 14px; }
+.tools { align-self: center; display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: center; padding: .6rem .8rem; max-width: 100vw; box-sizing: border-box; background: rgba(7, 13, 10, 0.78); border-top-left-radius: 10px; border-top-right-radius: 10px; font-size: 14px; }
+@media (max-width: 640px) { .tools { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; align-self: stretch; border-radius: 0; padding-bottom: calc(.6rem + env(safe-area-inset-bottom)); } .tools button { flex: none; } .radius { flex: none; } }
 button { padding: .4rem .7rem; border: 1px solid #5c7a63; background: #14231a; color: #d7f0dc; border-radius: 6px; cursor: pointer; }
 button.on { background: #2f7d46; border-color: #8be0a1; }
 .sep { width: 1px; align-self: stretch; background: #3b5342; }

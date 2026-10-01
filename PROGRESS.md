@@ -1,7 +1,7 @@
 # PROGRESS — Simulateur de vie
 
 ## Statut
-- Phase courante : 5 — Mode Dieu & UI
+- Phase courante : 6 — Intelligence avancée
 - Commandes : `make init`, `make install`, `make wasm`, `make check`, `make dev`, `make e2e`
 
 ## Checklist
@@ -35,12 +35,17 @@
 - [x] 5.1 Barre d'outils « Dieu » : semer des herbivores/carnivores au clic, pluie, sécheresse, météorite, bénédiction (énergie) ; commandes worker + curseur en conséquence
 - [x] 5.2 Inspecteur : clic sur une créature → énergie, âge, génération, neurones cachés, mini-visualisation du cerveau
 - [x] 5.3 Courbes : population par espèce + indice d'intelligence dans le temps (historique stocké dans le snapshot ou localStorage)
-- [ ] 5.4 HUD propre (remplace l'overlay de debug), réglages, mobile/tactile
+- [x] 5.4 HUD propre (remplace l'overlay de debug), réglages, mobile/tactile
 ### Phase 6 — Intelligence avancée (structure évolutive, apprentissage, paliers)
+- [ ] 6.1 Diagnostic : mesurer pourquoi l'intelligence ne monte pas (cerveau aléatoire ≈ neutre, reproduction non liée au comportement) — rapport headless : fitness (descendants / âge) selon le nombre de neurones, comportements émergents (part du temps à manger sur herbe, distance vers l'herbe)
+- [ ] 6.2 Pression de sélection : récompense réelle de l'intelligence (brouter vers l'herbe, éviter l'eau, fuir/chasser) ; reproduction plus rare et basée sur l'énergie accumulée ; mutations moins destructrices (sigma adaptatif), élitisme léger
+- [ ] 6.3 Apprentissage durant la vie (hebbien modulé par l'énergie gagnée) + héritage partiel (effet Baldwin)
+- [ ] 6.4 Indice d'intelligence composite (capacité + efficacité) affiché dans HUD/courbes ; paliers de comportement (meute, mémoire de l'eau)
+- [ ] 6.5 Équilibrage long terme : simulation headless 50 000 ticks — l'indice monte, aucune espèce ne disparaît ; rattrapage hors-ligne cohérent
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 5.4 : HUD propre — remplacer l'overlay de debug par une barre supérieure (nom, saison + jour/nuit, population, vitesse, menu ⚙ : sauvegarde/export/import/nouveau monde) ; réglages (volume futur, taille de carte ?) ; mobile/tactile : barres repliables, outils au pouce, e2e viewport mobile (Playwright `devices['Pixel 7']`) avec capture relue.
+Phase 6.1 : diagnostic de l'évolution (rapport headless dans `life.rs` : `cargo test intelligence_report -- --ignored --nocapture`) pour comprendre pourquoi l'indice reste à 4,0, avant de modifier la sélection.
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -51,6 +56,7 @@ Phase 5.4 : HUD propre — remplacer l'overlay de debug par une barre supérieur
 (aucun)
 
 ## Journal
+- 5.4 fait : `TopBar.vue` (titre, tick/saison/jour-nuit, population, vitesses, Courbes, Menu avec sauvegarder/exporter/importer/nouveau monde), `ui` store (courbes ouvertes sur grand écran seulement, mémorisé), `App.vue` en overlay flex (barre / panneaux gauche-droite / outils) sans chevauchement, outils en défilement horizontal sur mobile. e2e adaptés (menu) + `mobile.spec.ts` (pas de scroll horizontal, tap, courbes repliées). Captures bureau et mobile relues : disposition propre. Le conteneur `app` reste lancé (demande utilisateur : ne plus faire `docker compose down`). Vitest 29 + e2e 10 verts. Phase 5 terminée.
 - 5.3 fait : `sim/history.ts` (historique borné 600 pts, résolution divisée par 2 au dépassement, JSON validé, localStorage par graine, tronqué au tick de la sauvegarde), `LineChart.vue` (SVG, légende, points d'extrémité, réticule + infobulle, tableau accessible) et `Charts.vue` (population + intelligence moyenne). Skill dataviz appliqué : couleur = entité (herbivores bleu #3987e5, carnivores orange #d95926, slots 1-2) validée `validate_palette.js --mode dark` (ΔE CVD 9,4 / normal 26,5 : OK) ; jaune/rouge de la carte rejetés (ΔE normal 13,0 < 15). Capture relue : courbes OK ; corrigé l'axe du temps (« tick N » avant 1 jour) et titre trop long. Limite : intelligence plate à 4,0 pour l'instant (cf. phase 6). Vitest 29 + e2e 9 verts.
 - 5.2 fait : `sim/brain.ts` (décodage du génome, constantes miroir de brain.rs), `Frame.id` + `Frame.selected` (créature suivie par id stable, `SimController.inspect/selectedId`), commande worker `select`, store `pick/select/lastSelected`, outil « Inspecter » (tolérance 14 px), anneau dans le Renderer, `Inspector.vue` + `BrainView.vue` (SVG : entrées/cachés/sorties, liens verts/rouges). Capture `inspector.png` relue : anneau blanc sur la créature, fiche + schéma du cerveau (10 entrées, 4 cachés, 4 sorties) lisibles. Vitest 25 + e2e 8 verts.
 - 5.1 fait : Rust `life::meteor/bless` (+ `for_cells`), `world_meteor/world_bless`, pluie/sécheresse (`world_set_rain` ∈ [-1,1], `plants::step` : croissance nulle puis flétrissement), commandes worker `meteor/bless`, `Renderer.onWorldClick` (clic ≠ glisser), stores `god` (outil, rayon, message) + `GodTools.vue` (barre du bas). cargo 28, Vitest 24, e2e 7 verts (outils, météo, glisser sans effet). Note : un rayon de 40 couvre ~8 % de la carte 256².

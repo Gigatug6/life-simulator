@@ -28,7 +28,7 @@ const SPECIES = ['Herbivore', 'Carnivore']
 </template>
 
 <style scoped>
-.inspector { position: fixed; top: 0; right: 0; width: min(340px, 90vw); box-sizing: border-box; padding: .8rem; background: rgba(7, 13, 10, 0.85); border-bottom-left-radius: 10px; font-size: 13px; max-height: 100vh; overflow: auto; }
+.inspector { width: min(340px, 92vw); box-sizing: border-box; padding: .8rem; background: rgba(7, 13, 10, 0.85); border-bottom-left-radius: 10px; font-size: 13px; }
 header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .4rem; }
 button { background: none; border: 0; color: #d7f0dc; font-size: 1.2rem; cursor: pointer; }
 dl { display: grid; grid-template-columns: auto 1fr; gap: .15rem .8rem; margin: .3rem 0 .6rem; }
