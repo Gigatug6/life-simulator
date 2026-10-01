@@ -1,22 +1,48 @@
 /// <reference lib="webworker" />
 import wasmUrl from './wasm/life.wasm?url'
-import { loadEngine, type LifeExports } from './engine'
+import { loadEngine } from './engine'
+import { SimController } from './controller'
 import type { FromWorker, ToWorker } from './protocol'
 
-let engine: LifeExports | null = null
-const post = (m: FromWorker) => postMessage(m)
+const FRAME_MS = 33
+const BUDGET_MS = 22 // temps de calcul max par image : la simulation ralentit plutôt que de geler
+
+let sim: SimController | null = null
+let timer: ReturnType<typeof setTimeout> | null = null
+let enginePromise: ReturnType<typeof loadEngine> | null = null
+
+const post = (m: FromWorker, transfer: Transferable[] = []) => postMessage(m, transfer)
+
+function loop() {
+  if (!sim) return
+  const t0 = performance.now()
+  const ticks = sim.advance(BUDGET_MS)
+  const frame = sim.frame()
+  const dt = Math.max(performance.now() - t0, 1)
+  const transfer: Transferable[] = [frame.x.buffer, frame.y.buffer, frame.angle.buffer, frame.energy.buffer, frame.species.buffer]
+  if (frame.grass) transfer.push(frame.grass.buffer)
+  post({ type: 'frame', frame, ticksPerSecond: (ticks / dt) * 1000 }, transfer)
+  timer = setTimeout(loop, Math.max(FRAME_MS - dt, 1))
+}
 
 self.onmessage = async (e: MessageEvent<ToWorker>) => {
   try {
     const msg = e.data
     if (msg.type === 'init') {
-      engine = await loadEngine(fetch(wasmUrl))
+      enginePromise ??= loadEngine(fetch(wasmUrl))
+      const engine = await enginePromise
+      if (timer) clearTimeout(timer)
+      sim = new SimController(engine)
+      sim.init(msg.seed, msg.w, msg.h, msg.herbivores, msg.carnivores)
       post({ type: 'ready', version: engine.version() })
-    } else if (msg.type === 'tick' && engine) {
-      let total = 0
-      for (let i = 0; i < msg.n; i++) total = engine.tick()
-      post({ type: 'ticked', total })
-    }
+      const t = sim.terrain()
+      post({ type: 'terrain', ...t }, [t.biome.buffer])
+      loop()
+    } else if (!sim) {
+      return
+    } else if (msg.type === 'setSpeed') sim.speed = msg.speed
+    else if (msg.type === 'spawn') sim.spawn(msg.x, msg.y, msg.species, msg.count)
+    else if (msg.type === 'rain') sim.rain(msg.value)
   } catch (err) {
     post({ type: 'error', message: String(err) })
   }

@@ -200,6 +200,37 @@ pub extern "C" fn stats_mean_hidden(species: u32) -> f32 {
     unsafe { life::mean_hidden(&*core::ptr::addr_of!(CREATURES), species as u8) }
 }
 
+/// Peuple le monde : `count` créatures de l'espèce donnée sur des cases de terre (plaine et plus).
+/// Renvoie le nombre réellement créé.
+#[no_mangle]
+pub extern "C" fn world_populate(species: u32, count: u32) -> u32 {
+    unsafe {
+        if WIDTH == 0 {
+            return 0;
+        }
+        let c = &mut *core::ptr::addr_of_mut!(CREATURES);
+        let rng = &mut *core::ptr::addr_of_mut!(RNG);
+        let bio = &*core::ptr::addr_of!(BIOME);
+        let (w, h) = (WIDTH as usize, HEIGHT as usize);
+        let mut made = 0;
+        let mut tries = 0;
+        while made < count && tries < count * 50 + 100 {
+            tries += 1;
+            let (x, y) = (rng.next_f32() * w as f32, rng.next_f32() * h as f32);
+            if bio[(y as usize) * w + x as usize] >= world::PLAIN {
+                let mut genome = [0.0f32; brain::GENOME_LEN];
+                brain::random_genome(&mut genome, rng);
+                let angle = rng.next_f32() * 6.2831855;
+                if c.spawn(x, y, angle, 50.0, species as u8, 0, &genome).is_none() {
+                    break;
+                }
+                made += 1;
+            }
+        }
+        made
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn creature_kill(i: u32) {
     unsafe { (*core::ptr::addr_of_mut!(CREATURES)).kill(i as usize) }

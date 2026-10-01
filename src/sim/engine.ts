@@ -31,6 +31,7 @@ export interface LifeExports {
   creature_species_ptr(): number
   creature_genome_ptr(): number
   genome_len(): number
+  world_populate(species: number, count: number): number
   stats_count(species: number): number
   stats_mean_hidden(species: number): number
   rng_lo(): number
@@ -82,7 +83,19 @@ export const CREATURE_FIELDS = [
 export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
 
 /** Vue sur un champ des créatures vivantes (valide jusqu'à la prochaine croissance mémoire). */
-export function creatureView(e: LifeExports, name: CreatureField) {
+interface CreatureViews {
+  x: Float32Array
+  y: Float32Array
+  angle: Float32Array
+  energy: Float32Array
+  age: Uint32Array
+  id: Uint32Array
+  generation: Uint16Array
+  species: Uint8Array
+  genome: Float32Array
+}
+
+export function creatureView<K extends CreatureField>(e: LifeExports, name: K): CreatureViews[K] {
   const f = CREATURE_FIELDS.find((c) => c.name === name)!
-  return new f.ctor(e.memory.buffer, e[f.ptr](), (e.creature_count() * f.size) / f.ctor.BYTES_PER_ELEMENT)
+  return new f.ctor(e.memory.buffer, e[f.ptr](), (e.creature_count() * f.size) / f.ctor.BYTES_PER_ELEMENT) as CreatureViews[K]
 }
