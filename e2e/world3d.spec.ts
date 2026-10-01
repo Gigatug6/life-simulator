@@ -23,7 +23,19 @@ test('the 3D view shows the relief, can orbit, and switches back to 2D', async (
   await page.getByRole('button', { name: 'Pause' }).click()
   await page.waitForTimeout(1200)
   expect(await distinctColours(page)).toBeGreaterThan(12) // terrain, water, sky, creatures: not a blank canvas
+  await page.screenshot({ path: 'artifacts/screens/world3d-night.png' }) // tick ~8: the middle of the night
+
+  // let the clock run to the middle of the day (noon = tick 300), then freeze it for a daytime capture
+  // (×4 and a tight polling loop: a faster speed overshoots the daylight window of ticks ~180-420)
+  const tick = async () => Number(/Tick : (\d+)/.exec((await page.getByTestId('ticks').textContent()) ?? '')?.[1])
+  await page.getByRole('button', { name: '×4' }).click()
+  for (let i = 0; i < 400 && (await tick()) < 280; i++) await page.waitForTimeout(40)
+  await page.getByRole('button', { name: 'Pause' }).click()
+  expect(await tick()).toBeGreaterThan(250)
+  expect(await tick()).toBeLessThan(420) // really in the middle of the day
+  await page.waitForTimeout(800)
   await page.screenshot({ path: 'artifacts/screens/world3d-overview.png' })
+  expect(await distinctColours(page)).toBeGreaterThan(20) // daylight: a much richer image than the night
 
   // orbit: dragging changes what is on screen
   const box = (await page.getByTestId('world-canvas').boundingBox())!

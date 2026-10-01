@@ -129,6 +129,9 @@ export class Renderer implements WorldRenderer {
     this.dirty = true
   }
 
+  /** The 2D view has no sun or seasons: only `setDaylight` matters. */
+  setClock(_tick: number) {}
+
   /** Day/night: darkens the terrain (0 = night, 1 = full day). */
   setDaylight(d: number) {
     this.terrainMat?.color.setScalar(0.4 + 0.6 * d)

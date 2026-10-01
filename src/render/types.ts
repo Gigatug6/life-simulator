@@ -9,8 +9,10 @@ export interface WorldRenderer {
   setTerrain(w: number, h: number, biome: Uint8Array, altitude: Float32Array): void
   /** Colours the terrain with the current grass layer (w*h). */
   setGrass(grass: Float32Array): void
-  /** 0 = night, 1 = full day. */
+  /** 0 = night, 1 = full day (the 2D view dims its terrain with it). */
   setDaylight(d: number): void
+  /** Simulation clock in ticks: drives the sun, moon, sky and seasons of the 3D view (ignored in 2D). */
+  setClock(tick: number): void
   setCreatures(frame: Frame): void
   /** Highlights the followed creature (null = none). */
   setSelection(pos: { x: number; y: number } | null): void

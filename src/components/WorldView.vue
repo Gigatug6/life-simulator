@@ -23,6 +23,7 @@ function create() {
   const f = world.frame
   if (f) {
     r.setDaylight(f.daylight)
+    r.setClock(f.tick)
     r.setCreatures(f)
     r.setSelection(f.selected ? { x: f.selected.x, y: f.selected.y } : null)
   }
@@ -45,6 +46,7 @@ watch(() => world.frame, (f) => {
   if (!f || !renderer) return
   if (f.grass) renderer.setGrass(f.grass)
   renderer.setDaylight(f.daylight)
+  renderer.setClock(f.tick)
   renderer.setCreatures(f)
   renderer.setSelection(f.selected ? { x: f.selected.x, y: f.selected.y } : null)
 })
