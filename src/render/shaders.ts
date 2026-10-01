@@ -130,3 +130,56 @@ export const WATER_FRAGMENT = /* glsl */ `
     gl_FragColor = vec4(col, alpha);
   }
 `
+
+/** Bioluminescence: a camera-facing soft disc per glowing creature (instanced; additive blending). */
+export const GLOW_VERTEX = /* glsl */ `
+  varying vec2 vUv;
+  varying vec3 vColor;
+  void main() {
+    vUv = uv;
+    vColor = instanceColor;
+    // billboard: the instance position is moved to view space, then the quad is spread in the view plane
+    vec4 mv = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    float radius = length(instanceMatrix[0].xyz);
+    mv.xy += (uv - 0.5) * 2.0 * radius;
+    gl_Position = projectionMatrix * mv;
+  }
+`
+
+export const GLOW_FRAGMENT = /* glsl */ `
+  uniform float uStrength;
+  varying vec2 vUv;
+  varying vec3 vColor;
+  void main() {
+    float d = length(vUv - 0.5) * 2.0;
+    float a = pow(max(1.0 - d, 0.0), 2.2);
+    gl_FragColor = vec4(vColor * a * uStrength, a);
+  }
+`
+
+/** Fireflies: points drifting around their anchor and blinking, visible only at night. */
+export const FIREFLY_VERTEX = /* glsl */ `
+  uniform float uTime;
+  uniform float uNight;
+  uniform float uSize;
+  attribute float aPhase;
+  varying float vAlpha;
+  void main() {
+    float t = uTime + aPhase * 20.0;
+    vec3 p = position;
+    p += vec3(sin(t * 0.7) * 1.2 + sin(t * 1.9) * 0.4, sin(t * 1.3) * 0.5, cos(t * 0.6) * 1.2 + cos(t * 1.7) * 0.4);
+    vec4 mv = viewMatrix * vec4(p, 1.0);
+    gl_PointSize = uSize * (160.0 / max(-mv.z, 1.0));
+    gl_Position = projectionMatrix * mv;
+    vAlpha = uNight * smoothstep(0.25, 0.9, 0.5 + 0.5 * sin(t * 2.3 + aPhase * 6.0));
+  }
+`
+
+export const FIREFLY_FRAGMENT = /* glsl */ `
+  varying float vAlpha;
+  void main() {
+    float d = length(gl_PointCoord - 0.5) * 2.0;
+    float a = pow(max(1.0 - d, 0.0), 2.0) * vAlpha;
+    gl_FragColor = vec4(vec3(0.78, 1.0, 0.35) * a * 1.6, a);
+  }
+`

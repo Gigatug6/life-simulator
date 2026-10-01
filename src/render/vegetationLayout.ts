@@ -75,6 +75,25 @@ export function buildLayout(w: number, h: number, biome: Uint8Array): Layout {
   return { trees: trees.data, tufts: tufts.data, rocks: rocks.data, treeCount: trees.count, tuftCount: tufts.count, rockCount: rocks.count }
 }
 
+/**
+ * Where the fireflies hover: spread over the trees (or over the grass tufts of a treeless world), with a
+ * random phase each. Returns [x, y, phase] triples (world x, world y, phase in 0..1).
+ */
+export function fireflyAnchors(layout: Layout, max: number): Float32Array {
+  const source = layout.treeCount >= 20 ? layout.trees : layout.tufts
+  const count = layout.treeCount >= 20 ? layout.treeCount : layout.tuftCount
+  const n = Math.min(max, count)
+  const out = new Float32Array(n * 3)
+  const step = count / Math.max(n, 1)
+  for (let k = 0; k < n; k++) {
+    const o = Math.floor(k * step) * STRIDE
+    out[k * 3] = source[o]! + (hash01(k, 7, 91) - 0.5) * 1.6
+    out[k * 3 + 1] = source[o + 1]! + (hash01(k, 8, 92) - 0.5) * 1.6
+    out[k * 3 + 2] = hash01(k, 9, 93)
+  }
+  return out
+}
+
 /** Size multiplier (0..1) of a grass tuft from the grass of its cell: grazed cells lose their tufts. */
 export function tuftScale(grass: number, biome: number): number {
   const cap = CAPACITY[biome] ?? 1

@@ -16,6 +16,33 @@ const distinctColours = (page: Page) =>
     return set.size
   })
 
+/**
+ * Jumps the world forward by `ticks` through the offline catch-up (30 ticks per real second): the save is
+ * aged by ticks/30 s and the page reloaded. Deterministic, unlike steering the clock with speed buttons
+ * (each click and poll costs seconds under software WebGL, during which the clock runs far ahead).
+ * The pause is remembered across the reload, so the world comes back frozen.
+ */
+async function jumpForward(page: Page, ticks: number) {
+  await page.getByTestId('menu-toggle').click()
+  await page.getByRole('menuitem', { name: 'Sauvegarder' }).click()
+  await expect(page.getByTestId('saved')).toContainText('Sauvegardé à')
+  await page.evaluate(async (ageMs: number) => {
+    const path = '/src/persist/store.ts'
+    const { createSaveStore } = (await import(/* @vite-ignore */ path)) as typeof import('../src/persist/store')
+    const store = createSaveStore()
+    const rec = (await store.load())!
+    await store.save(rec.data, { ...rec.meta, savedAt: rec.meta.savedAt - ageMs })
+  }, (ticks / 30) * 1000)
+  await page.reload()
+  await expect(page.getByTestId('status')).toContainText('Monde repris')
+  await expect(page.getByTestId('catchup')).toHaveCount(0, { timeout: 60_000 })
+  await expect(page.getByRole('button', { name: 'Pause' })).toBeDisabled() // = the active speed
+  await expect(page.getByTestId('world-canvas')).toHaveAttribute('data-mode', '3d')
+  await page.waitForTimeout(1500)
+}
+
+const currentTick = async (page: Page) => Number(/Tick : (\d+)/.exec((await page.getByTestId('ticks').textContent()) ?? '')?.[1])
+
 test('the 3D view shows the relief, can orbit, and switches back to 2D', { tag: '@3d' }, async ({ page }) => {
   await page.goto(SEED_URL)
   await expect(page.getByTestId('population')).toContainText('herbivores')
@@ -149,46 +176,57 @@ test('the 3D decor follows the seasons: orange foliage in autumn, snow in winter
       return hits / (d.length / 4)
     }, which)
 
-  /**
-   * Jumps the world forward by `ticks` through the offline catch-up (30 ticks per real second): the save is
-   * aged by ticks/30 s and the page reloaded. Deterministic, unlike steering the clock with speed buttons
-   * (each click and poll costs seconds under software WebGL, during which the clock runs far ahead).
-   */
-  const jumpForward = async (ticks: number) => {
-    await page.getByTestId('menu-toggle').click()
-    await page.getByRole('menuitem', { name: 'Sauvegarder' }).click()
-    await expect(page.getByTestId('saved')).toContainText('Sauvegardé à')
-    await page.evaluate(async (ageMs: number) => {
-      const path = '/src/persist/store.ts'
-      const { createSaveStore } = (await import(/* @vite-ignore */ path)) as typeof import('../src/persist/store')
-      const store = createSaveStore()
-      const rec = (await store.load())!
-      await store.save(rec.data, { ...rec.meta, savedAt: rec.meta.savedAt - ageMs })
-    }, (ticks / 30) * 1000)
-    await page.reload() // the 3D preference and the pause are remembered: the world comes back frozen
-    await expect(page.getByTestId('status')).toContainText('Monde repris')
-    await expect(page.getByTestId('catchup')).toHaveCount(0, { timeout: 60_000 })
-    await expect(page.getByRole('button', { name: 'Pause' })).toBeDisabled() // = the active speed
-    await expect(page.getByTestId('world-canvas')).toHaveAttribute('data-mode', '3d')
-    await page.waitForTimeout(1500)
-  }
-
   await page.getByRole('button', { name: 'Pause' }).click()
   const spring = { orange: await share('orange'), white: await share('white') } // tick ~0: green decor, night
 
   // mid-autumn; the catch-up also counts the real seconds of the reload (~30 ticks each), the world is frozen after
-  await jumpForward(4500 - (await tick())) // 4500 % 600 = 300: noon
+  await jumpForward(page, 4500 - (await tick())) // 4500 % 600 = 300: noon
   expect(await tick()).toBeGreaterThanOrEqual(4500)
   expect(await tick()).toBeLessThan(4600) // 4600 % 600 = 400: still daylight
   await page.screenshot({ path: 'artifacts/screens/world3d-autumn.png' })
   const autumn = { orange: await share('orange'), white: await share('white') }
   expect(autumn.orange).toBeGreaterThan(Math.max(0.01, spring.orange * 3)) // the foliage and fields turned orange
 
-  await jumpForward(6300 - (await tick())) // mid-winter (tick 6300), noon
+  await jumpForward(page, 6300 - (await tick())) // mid-winter (tick 6300), noon
   expect(await tick()).toBeGreaterThanOrEqual(6300)
   expect(await tick()).toBeLessThan(6400)
   await page.screenshot({ path: 'artifacts/screens/world3d-winter.png' })
   const winter = { orange: await share('orange'), white: await share('white') }
   expect(winter.white).toBeGreaterThan(Math.max(0.02, spring.white * 3)) // snow on the heights, pale foliage
   expect(winter.orange).toBeLessThan(autumn.orange) // the autumn colours are gone
+})
+
+test('at night the 3D world glows: fireflies between the trees, bioluminescent creatures, bloom', { tag: '@3d' }, async ({ page }) => {
+  test.setTimeout(180_000)
+  await page.goto(SEED_URL)
+  await expect(page.getByTestId('population')).toContainText('herbivores')
+  await page.getByTestId('mode-toggle').click()
+  await page.getByRole('button', { name: 'Pause' }).click()
+  // midnight (4800 % 600 = 0) in a world that has had thousands of ticks to evolve its lights
+  await jumpForward(page, 4800 - (await currentTick(page)))
+  const t = await currentTick(page)
+  expect(t).toBeGreaterThanOrEqual(4800)
+  expect(t).toBeLessThan(4900) // still the dead of night
+  await page.screenshot({ path: 'artifacts/screens/world3d-night-glow.png' })
+
+  // bright, warm-green dots on a dark background: the fireflies and the glows (a night without any is black)
+  const lit = await page.getByTestId('world-canvas').evaluate((c: HTMLCanvasElement) => {
+    const g = document.createElement('canvas')
+    g.width = 320
+    g.height = 180
+    const ctx = g.getContext('2d')!
+    ctx.drawImage(c, 0, 0, 320, 180)
+    const d = ctx.getImageData(0, 0, 320, 180).data
+    let hits = 0
+    for (let i = 0; i < d.length; i += 4) if (d[i + 1]! > 170 && d[i]! > 110 && d[i + 2]! < 200) hits++
+    return hits
+  })
+  expect(lit).toBeGreaterThan(8)
+
+  // closer look
+  const box = (await page.getByTestId('world-canvas').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  for (let i = 0; i < 5; i++) await page.mouse.wheel(0, -600)
+  await page.waitForTimeout(1200)
+  await page.screenshot({ path: 'artifacts/screens/world3d-night-closeup.png' })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { creatureScale3d, writeInstances3d, writeShadows3d, type CreatureArrays, type InstanceTarget } from './instances3d'
+import { GLOW_THRESHOLD, creatureScale3d, writeGlows3d, writeInstances3d, writeShadows3d, type CreatureArrays, type InstanceTarget } from './instances3d'
 import { Ground, RELIEF, SEA_LEVEL, heightOfAltitude } from './relief'
 
 const flat = (w: number, h: number, alt: number) => new Float32Array(w * h).fill(alt)
@@ -118,6 +118,40 @@ describe('writeInstances3d', () => {
     expect(creatureScale3d(10)).toBe(1)
     expect(creatureScale3d(1)).toBe(5)
     expect(creatureScale3d(0)).toBeGreaterThan(100) // guarded against a division by zero
+  })
+})
+
+describe('writeGlows3d', () => {
+  const ground = new Ground(16, 16, new Float32Array(256).fill(SEA_LEVEL + 0.1))
+  const run = (rows: Parameters<typeof arrays>[0]) => {
+    const m = new Float32Array(rows.length * 16)
+    const c = new Float32Array(rows.length * 3)
+    const count = writeGlows3d(rows.length, arrays(rows), ground, 10, m, c)
+    return { m, c, count }
+  }
+
+  it('only creatures that shine get a glow, packed one after the other', () => {
+    const { m, count } = run([
+      { x: 1, y: 1, angle: 0, signal: 0 },
+      { x: 5, y: 6, angle: 0, signal: 0.8 },
+      { x: 3, y: 3, angle: 0, signal: GLOW_THRESHOLD - 0.01 },
+      { x: 9, y: 2, angle: 0, signal: 0.5 },
+    ])
+    expect(count).toBe(2)
+    expect([m[12], m[14]]).toEqual([5, 6]) // the first glow is the second creature
+    expect([m[16 + 12], m[16 + 14]]).toEqual([9, 2])
+  })
+
+  it('brighter signal: bigger and brighter glow, hovering above the body', () => {
+    const { m, c } = run([{ x: 4, y: 4, angle: 0, signal: 0.3 }, { x: 8, y: 8, angle: 0, signal: 1 }])
+    expect(m[16]!).toBeGreaterThan(m[0]!) // radius grows with the signal
+    expect(c[3]! + c[4]! + c[5]!).toBeGreaterThan(c[0]! + c[1]! + c[2]!)
+    expect(m[13]).toBeGreaterThan(0.1 * RELIEF) // above the ground
+    for (const v of c) expect(v).toBeLessThanOrEqual(1 + 1e-6)
+  })
+
+  it('writes nothing when nobody shines', () => {
+    expect(run([{ x: 1, y: 1, angle: 0, signal: 0 }]).count).toBe(0)
   })
 })
 

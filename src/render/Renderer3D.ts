@@ -1,5 +1,9 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import type { Frame } from '../sim/protocol'
 import { Ground } from './relief'
 import { terrainColor } from './terrainColor'
@@ -8,6 +12,8 @@ import { carnivoreGeometry, herbivoreGeometry } from './creatureModels'
 import { skyAt } from './sky'
 import { applySeason, seasonFactors, type SeasonFactors } from './seasons'
 import { Vegetation } from './Vegetation'
+import { Glow } from './Glow'
+import { Fireflies } from './Fireflies'
 import { buildLayout } from './vegetationLayout'
 import { SKY_FRAGMENT, SKY_VERTEX, WATER_FRAGMENT, WATER_VERTEX } from './shaders'
 import type { WorldRenderer } from './types'
@@ -67,6 +73,10 @@ export class Renderer3D implements WorldRenderer {
 
   private bodies: [THREE.InstancedMesh, THREE.InstancedMesh] // herbivores, carnivores
   private vegetation: Vegetation // trees, grass tufts, rocks
+  private glow: Glow // bioluminescence of the creatures that emit light
+  private fireflies: Fireflies // drifting lights between the trees at night
+  private composer: EffectComposer // scene -> bloom -> screen
+  private bloom: UnrealBloomPass
   private shadows: THREE.InstancedMesh // flat dark discs under the creatures
   private ring: THREE.Mesh
   private ringPos: { x: number; y: number } | null = null
@@ -100,6 +110,8 @@ export class Renderer3D implements WorldRenderer {
     this.scene.add(this.sky)
 
     this.vegetation = new Vegetation(this.scene)
+    this.glow = new Glow(this.scene)
+    this.fireflies = new Fireflies(this.scene)
 
     // creatures: one InstancedMesh per species (low-poly bodies with vertex colours for eyes, ears, feet)
     const makeBodies = (geometry: THREE.BufferGeometry) => {
@@ -134,6 +146,14 @@ export class Renderer3D implements WorldRenderer {
     this.ring.renderOrder = 10
     this.ring.visible = false
     this.scene.add(this.ring)
+
+    // post-processing: the scene is rendered in floating point, only what is brighter than 1 blooms
+    // (sun disc, specular glints, glows, fireflies), then OutputPass converts to the screen colour space
+    this.composer = new EffectComposer(this.renderer)
+    this.composer.addPass(new RenderPass(this.scene, this.camera))
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.7, 0.6, 1.15)
+    this.composer.addPass(this.bloom)
+    this.composer.addPass(new OutputPass())
 
     this.controls = new OrbitControls(this.camera, canvas)
     this.controls.enableDamping = true
@@ -200,7 +220,9 @@ export class Renderer3D implements WorldRenderer {
     this.paint(this.lastGrass, this.currentSeason)
 
     this.buildWater()
-    this.vegetation.setTerrain(buildLayout(w, h, biome), this.ground, biome)
+    const layout = buildLayout(w, h, biome)
+    this.vegetation.setTerrain(layout, this.ground, biome)
+    this.fireflies.setTerrain(layout, this.ground)
 
     // starting point of view: above the south edge, looking at the island centre (at ground level there)
     this.controls.target.set(w / 2, Math.max(this.ground.at(w / 2, h / 2), 0), h / 2)
@@ -362,6 +384,8 @@ export class Renderer3D implements WorldRenderer {
     // seasons: repaint the terrain when the look changed noticeably
     const f = seasonFactors(tick)
     this.vegetation.setSeason(f)
+    this.glow.setNight(1 - s.day)
+    this.fireflies.setNight(1 - s.day)
     if (Math.abs(f.autumn - this.paintedSeason.autumn) > 0.04 || Math.abs(f.winter - this.paintedSeason.winter) > 0.04) {
       this.paint(this.lastGrass, f)
     }
@@ -391,6 +415,7 @@ export class Renderer3D implements WorldRenderer {
       m.instanceMatrix.needsUpdate = true
       m.instanceColor!.needsUpdate = true
     })
+    this.glow.update(f, n, this.ground, ppc)
     writeShadows3d(n, f, this.ground, ppc, this.shadows.instanceMatrix.array as Float32Array)
     this.shadows.count = n
     this.shadows.instanceMatrix.needsUpdate = true
@@ -406,6 +431,8 @@ export class Renderer3D implements WorldRenderer {
     const w = this.canvas.clientWidth || 800
     const h = this.canvas.clientHeight || 600
     this.renderer.setSize(w, h, false)
+    this.composer.setPixelRatio(this.renderer.getPixelRatio())
+    this.composer.setSize(w, h)
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
   }
@@ -420,6 +447,7 @@ export class Renderer3D implements WorldRenderer {
 
   private draw() {
     this.waterUniforms.uTime.value = performance.now() / 1000
+    this.fireflies.setTime(performance.now() / 1000)
     this.vegetation.setDistance(this.camera.position.distanceTo(this.controls.target))
     this.sky.position.copy(this.camera.position)
     // creature size depends on the camera distance: rebuild the instances when it changed noticeably
@@ -432,7 +460,7 @@ export class Renderer3D implements WorldRenderer {
       this.ring.position.set(x, Math.max(this.ground.at(x, y), 0) + 0.6, y)
       this.ring.scale.set(r, 1, r)
     } else this.ring.visible = false
-    this.renderer.render(this.scene, this.camera)
+    this.composer.render()
   }
 
   /** A click (little movement, short press) picks the point of the terrain under the cursor. */
@@ -489,6 +517,9 @@ export class Renderer3D implements WorldRenderer {
       this.outerSea.geometry.dispose() // its material is the water's, already disposed above
     }
     this.vegetation.dispose()
+    this.glow.dispose()
+    this.fireflies.dispose()
+    this.composer.dispose()
     for (const m of [...this.bodies, this.shadows]) {
       this.scene.remove(m)
       m.geometry.dispose()

@@ -1,5 +1,6 @@
 /** Fills the 3D creature instance buffers (4×4 matrices + colours). Pure, testable. */
 import { writeCreatureColor } from './instances'
+import { lineageRgb } from './creatureColor'
 import type { Ground } from './relief'
 import type { Frame } from '../sim/protocol'
 
@@ -86,6 +87,55 @@ export function writeInstances3d(
     writeCreatureColor(t.colors, k, f.species[i]!, f.hue[i]!, f.energy[i]!, f.size[i]!, f.signal[i]!)
   }
   return counts
+}
+
+/** Creatures dimmer than this emit no visible light. */
+export const GLOW_THRESHOLD = 0.1
+
+/**
+ * Bioluminescence: one soft billboard per creature that shines. The matrix carries the position and
+ * the glow radius (its x axis length); the colour is the lineage colour pulled towards white and scaled by
+ * the signal. Returns how many glows were written.
+ */
+export function writeGlows3d(
+  n: number,
+  f: CreatureArrays,
+  ground: Ground,
+  pixelsPerCell: number,
+  matrices: Float32Array,
+  colors: Float32Array,
+): number {
+  const base = creatureScale3d(pixelsPerCell)
+  let k = 0
+  for (let i = 0; i < n; i++) {
+    const sig = f.signal[i]!
+    if (sig < GLOW_THRESHOLD) continue
+    const radius = base * f.size[i]! * (0.8 + 3.2 * sig)
+    const m = k * 16
+    matrices[m] = radius
+    matrices[m + 1] = 0
+    matrices[m + 2] = 0
+    matrices[m + 3] = 0
+    matrices[m + 4] = 0
+    matrices[m + 5] = radius
+    matrices[m + 6] = 0
+    matrices[m + 7] = 0
+    matrices[m + 8] = 0
+    matrices[m + 9] = 0
+    matrices[m + 10] = radius
+    matrices[m + 11] = 0
+    matrices[m + 12] = f.x[i]!
+    matrices[m + 13] = Math.max(ground.at(f.x[i]!, f.y[i]!), 0) + 0.9 * base * f.size[i]!
+    matrices[m + 14] = f.y[i]!
+    matrices[m + 15] = 1
+    const [r, g, b] = lineageRgb(f.species[i]!, f.hue[i]!)
+    const gain = Math.sqrt(sig)
+    colors[k * 3] = (r * 0.55 + 0.45) * gain
+    colors[k * 3 + 1] = (g * 0.55 + 0.45) * gain
+    colors[k * 3 + 2] = (b * 0.55 + 0.45) * gain
+    k++
+  }
+  return k
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_TREES, STRIDE, buildLayout, crownScale, foliageRgb, hash01, tuftRgb, tuftScale } from './vegetationLayout'
+import { MAX_TREES, STRIDE, buildLayout, crownScale, fireflyAnchors, foliageRgb, hash01, tuftRgb, tuftScale } from './vegetationLayout'
 
 /** A 40×30 world: forest left, plain middle, mountain top-right, water elsewhere. */
 function world() {
@@ -81,6 +81,31 @@ describe('buildLayout', () => {
     let maxY = 0
     for (let k = 0; k < l.treeCount; k++) maxY = Math.max(maxY, l.trees[k * STRIDE + 1]!)
     expect(maxY).toBeGreaterThan(big * 0.9)
+  })
+})
+
+describe('fireflyAnchors', () => {
+  const { w, h, biome } = world()
+  const layout = buildLayout(w, h, biome)
+
+  it('hovers over the trees, at most `max`, deterministic, with a phase in 0..1', () => {
+    const a = fireflyAnchors(layout, 50)
+    expect(a.length).toBe(50 * 3)
+    expect(fireflyAnchors(layout, 50)).toEqual(a)
+    for (let k = 0; k < 50; k++) {
+      expect(a[k * 3]!).toBeGreaterThanOrEqual(-1) // near the forest (cells 0..11), jittered by < 1
+      expect(a[k * 3]!).toBeLessThan(13)
+      expect(a[k * 3 + 2]!).toBeGreaterThanOrEqual(0)
+      expect(a[k * 3 + 2]!).toBeLessThan(1)
+    }
+    expect(fireflyAnchors(layout, 100000).length).toBe(layout.treeCount * 3) // never more than there are trees
+  })
+
+  it('falls back to the grass tufts in a world without trees', () => {
+    const plain = new Uint8Array(30 * 30).fill(3)
+    const l = buildLayout(30, 30, plain)
+    expect(l.treeCount).toBe(0)
+    expect(fireflyAnchors(l, 40).length).toBe(40 * 3)
   })
 })
 
