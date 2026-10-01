@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { Biome, ELITE_SLOTS, GENOME_LEN, LEARN_LEN, TRAIT_LEN, Trait, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
+import { BRAIN_IN, BRAIN_OUT } from './brain'
+import { Biome, ELITE_SLOTS, GENOME_LEN, LEARN_LEN, MEM_LEN, TRAIT_LEN, Trait, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
@@ -62,6 +63,11 @@ describe.runIf(existsSync(wasmPath))('WASM engine', () => {
     expect(e.genome_len()).toBe(GENOME_LEN)
     expect(e.learn_len()).toBe(LEARN_LEN)
     expect(e.trait_len()).toBe(TRAIT_LEN)
+    expect(e.brain_in()).toBe(BRAIN_IN)
+    expect(e.brain_out()).toBe(BRAIN_OUT)
+    expect(e.mem_len()).toBe(MEM_LEN)
+    expect(creatureView(e, 'memory').length).toBe(2 * MEM_LEN)
+    expect(creatureView(e, 'signal').length).toBe(2)
     expect(creatureView(e, 'traits').length).toBe(2 * TRAIT_LEN)
     // the traits follow the swapped creature too
     const traits1 = creatureView(e, 'traits').slice(TRAIT_LEN)
@@ -92,6 +98,20 @@ describe.runIf(existsSync(wasmPath))('WASM engine', () => {
     expect(e.stats_mean_trait(0, Trait.Size)).toBeCloseTo(1, 1)
     expect(e.stats_mean_trait(1, Trait.Size)).toBe(0) // no carnivores
     expect(e.stats_mean_trait(0, 9)).toBe(0) // invalid trait index
+  })
+
+  it('founders have only tanh neurons, nearly dark, with the new senses almost unwired', async () => {
+    const e = await loadEngine(readFileSync(wasmPath))
+    e.world_init(5, 64, 64)
+    e.world_populate(0, 60)
+    expect(e.stats_kind_share(0, 0)).toBe(1) // all founders' neurons are tanh
+    for (const k of [1, 2, 3]) expect(e.stats_kind_share(0, k)).toBe(0)
+    expect(e.stats_new_wiring(0)).toBeLessThan(0.15) // 10 % of a normal weight scale
+    expect(e.stats_mean_signal(0)).toBe(0) // nobody has acted yet: no light
+    for (let i = 0; i < 5; i++) e.tick()
+    expect(e.stats_mean_signal(0)).toBeGreaterThan(0)
+    expect(e.stats_mean_signal(0)).toBeLessThan(0.4) // the light output starts nearly dark
+    expect(e.stats_kind_share(1, 0)).toBe(0) // no carnivores: no data
   })
 
   it('exposes per-species statistics', async () => {

@@ -63,7 +63,7 @@ pub extern "C" fn add(a: i32, b: i32) -> i32 {
 static mut ALTITUDE: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
 static mut GRASS: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
 static mut CREATURES: creatures::Creatures = creatures::Creatures::new();
-static mut GRID: spatial::SpatialHash = spatial::SpatialHash::new();
+static mut GRID: life::Grids = life::Grids::new();
 static mut ELITES: elite::Elites = elite::Elites::new();
 static mut RAIN: f32 = 0.0;
 static mut SEED: u32 = 0;
@@ -259,6 +259,52 @@ pub extern "C" fn world_populate(species: u32, count: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn trait_len() -> u32 {
     traits::TRAIT_LEN as u32
+}
+
+/// Number of brain inputs / outputs (mirrored by the TypeScript side and checked by a test).
+#[no_mangle]
+pub extern "C" fn brain_in() -> u32 {
+    brain::IN as u32
+}
+
+#[no_mangle]
+pub extern "C" fn brain_out() -> u32 {
+    brain::OUT as u32
+}
+
+/// Share (0..1) of the active hidden neurons of a species that are of kind `kind` (0 tanh, 1 bump, 2 step, 3 wave).
+#[no_mangle]
+pub extern "C" fn stats_kind_share(species: u32, kind: u32) -> f32 {
+    unsafe { life::kind_share(&*core::ptr::addr_of!(CREATURES), species as u8, kind as usize) }
+}
+
+/// Mean light signal (0..1) emitted by a species.
+#[no_mangle]
+pub extern "C" fn stats_mean_signal(species: u32) -> f32 {
+    unsafe { life::mean_signal(&*core::ptr::addr_of!(CREATURES), species as u8) }
+}
+
+/// Mean absolute weight of the later-added inputs (danger, light, memory): how wired-in the new senses are.
+#[no_mangle]
+pub extern "C" fn stats_new_wiring(species: u32) -> f32 {
+    unsafe { life::new_sense_wiring(&*core::ptr::addr_of!(CREATURES), species as u8) }
+}
+
+/// Number of recurrent memory cells per creature.
+#[no_mangle]
+pub extern "C" fn mem_len() -> u32 {
+    creatures::MEM_LEN as u32
+}
+
+#[no_mangle]
+pub extern "C" fn creature_memory_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.memory) as *const f32 }
+}
+
+/// Light signal (0..1) emitted by each creature this tick.
+#[no_mangle]
+pub extern "C" fn creature_signal_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.signal) as *const f32 }
 }
 
 #[no_mangle]

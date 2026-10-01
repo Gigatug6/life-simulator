@@ -3,11 +3,19 @@ import { computed } from 'vue'
 import { useWorldStore } from '../stores/world'
 import BrainView from './BrainView.vue'
 import { lineageCss } from '../render/creatureColor'
+import { NEURON_KINDS, describeBrain } from '../sim/brain'
 
 const world = useWorldStore()
 const info = computed(() => world.lastSelected)
 const alive = computed(() => !!world.frame?.selected)
 const SPECIES = ['Herbivore', 'Carnivore']
+// summary of the neuron kinds, e.g. "3 Classique · 2 Onde"
+const kinds = computed(() => {
+  if (!info.value) return ''
+  const counts = NEURON_KINDS.map(() => 0)
+  for (const k of describeBrain(info.value.genome).kinds) counts[k]!++
+  return NEURON_KINDS.map((k, i) => (counts[i] ? `${counts[i]} ${k.label}` : '')).filter(Boolean).join(' · ')
+})
 </script>
 
 <template>
@@ -22,6 +30,8 @@ const SPECIES = ['Herbivore', 'Carnivore']
       <dt>Âge</dt><dd>{{ info.age }} ticks</dd>
       <dt>Génération</dt><dd>{{ info.generation }}</dd>
       <dt>Neurones cachés</dt><dd data-testid="inspector-hidden">{{ info.hidden }}</dd>
+      <dt>Types</dt><dd data-testid="inspector-kinds">{{ kinds }}</dd>
+      <dt>Lumière</dt><dd data-testid="inspector-light">{{ Math.round(info.signal * 100) }} %</dd>
       <dt>Taille</dt><dd data-testid="inspector-size">×{{ info.traits.size.toFixed(2) }}</dd>
       <dt>Vitesse</dt><dd>×{{ info.traits.speed.toFixed(2) }}</dd>
       <dt>Vision</dt><dd>×{{ info.traits.vision.toFixed(2) }}</dd>

@@ -109,17 +109,22 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     const s = sim.frame().selected!
     expect(s.id).toBe(f.id[3])
     expect(s.x).toBe(f.x[3])
-    expect(s.genome.length).toBe(185)
+    expect(s.genome.length).toBe(258)
     expect(s.hidden).toBe(4) // initial genome: 4 hidden neurons
     expect(s.traits.size).toBeCloseTo(f.size[3]!)
     expect(s.traits.hue).toBeCloseTo(f.hue[3]!)
     expect(f.size.length).toBe(f.count)
+    expect(f.signal.length).toBe(f.count)
+    expect(s.signal).toBeCloseTo(f.signal[3]!)
+    expect(describeBrain(s.genome).kinds.every((k) => k === 0)).toBe(true) // founders: all tanh
+    expect(describeBrain(s.genome).w1[0]!.length).toBe(14) // 14 inputs
+    expect(describeBrain(s.genome).w2.length).toBe(5) // 5 outputs
     expect(f.hue.length).toBe(f.count)
     const brain = describeBrain(s.genome)
     expect(brain.hidden).toBe(4)
     expect(brain.w1.length).toBe(4)
-    expect(brain.w1[0]!.length).toBe(10)
-    expect(brain.w2.length).toBe(4)
+    expect(brain.w1[0]!.length).toBe(14)
+    expect(brain.w2.length).toBe(5)
     expect(brain.w2[0]!.length).toBe(4)
     sim.meteor(64, 64, 200)
     expect(sim.frame().selected).toBeNull()

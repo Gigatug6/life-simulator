@@ -35,6 +35,14 @@ export interface LifeExports {
   genome_len(): number
   learn_len(): number
   trait_len(): number
+  brain_in(): number
+  brain_out(): number
+  mem_len(): number
+  creature_memory_ptr(): number
+  creature_signal_ptr(): number
+  stats_kind_share(species: number, kind: number): number
+  stats_mean_signal(species: number): number
+  stats_new_wiring(species: number): number
   creature_traits_ptr(): number
   stats_mean_trait(species: number, k: number): number
   world_rescues(): number
@@ -79,9 +87,11 @@ export function grassView(e: LifeExports): Float32Array {
 }
 
 /** Genome length in f32 (mirror of brain::GENOME_LEN; checked by a test). */
-export const GENOME_LEN = 185
+export const GENOME_LEN = 258
 /** Learned deltas per creature (mirror of brain::LEARN_LEN). */
-export const LEARN_LEN = 48
+export const LEARN_LEN = 60
+/** Memory cells per creature (mirror of creatures::MEM_LEN). */
+export const MEM_LEN = 2
 /** Physical traits per creature (mirror of traits::TRAIT_LEN). */
 export const TRAIT_LEN = 4
 /** Indices of the physical traits (mirror of wasm/src/traits.rs). */
@@ -102,6 +112,8 @@ export const CREATURE_FIELDS = [
   { name: 'genome', size: GENOME_LEN * 4, ptr: 'creature_genome_ptr', ctor: Float32Array },
   { name: 'learned', size: LEARN_LEN * 4, ptr: 'creature_learned_ptr', ctor: Float32Array },
   { name: 'traits', size: TRAIT_LEN * 4, ptr: 'creature_traits_ptr', ctor: Float32Array },
+  { name: 'memory', size: MEM_LEN * 4, ptr: 'creature_memory_ptr', ctor: Float32Array },
+  { name: 'signal', size: 4, ptr: 'creature_signal_ptr', ctor: Float32Array },
 ] as const
 
 export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
@@ -119,6 +131,8 @@ interface CreatureViews {
   genome: Float32Array
   learned: Float32Array
   traits: Float32Array
+  memory: Float32Array
+  signal: Float32Array
 }
 
 export function creatureView<K extends CreatureField>(e: LifeExports, name: K): CreatureViews[K] {

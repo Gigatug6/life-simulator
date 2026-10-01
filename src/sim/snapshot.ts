@@ -5,7 +5,7 @@
 import { CREATURE_FIELDS, ELITE_SLOTS, GENOME_LEN, altitudeView, biomeView, grassView, type LifeExports } from './engine'
 
 export const SNAPSHOT_MAGIC = 0x4c494645 // "LIFE"
-export const SNAPSHOT_VERSION = 5
+export const SNAPSHOT_VERSION = 6
 const HEADER = 32
 /** "Elites" section: count + rescues (2 u32), f32 scores, f32 genomes. */
 const ELITE_BYTES = 8 + ELITE_SLOTS * 4 + ELITE_SLOTS * GENOME_LEN * 4

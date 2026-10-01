@@ -25,7 +25,7 @@ function loop() {
   const ticks = sim.advance(BUDGET_MS)
   const frame = sim.frame()
   const dt = Math.max(performance.now() - t0, 1)
-  const transfer: Transferable[] = [frame.x.buffer, frame.y.buffer, frame.angle.buffer, frame.energy.buffer, frame.species.buffer, frame.id.buffer, frame.size.buffer, frame.hue.buffer]
+  const transfer: Transferable[] = [frame.x.buffer, frame.y.buffer, frame.angle.buffer, frame.energy.buffer, frame.species.buffer, frame.id.buffer, frame.size.buffer, frame.hue.buffer, frame.signal.buffer]
   if (frame.grass) transfer.push(frame.grass.buffer)
   if (frame.selected) transfer.push(frame.selected.genome.buffer)
   post({ type: 'frame', frame, ticksPerSecond: (ticks / dt) * 1000 }, transfer)

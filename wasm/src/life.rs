@@ -1,6 +1,6 @@
 //! Creature dynamics: perception -> brain -> action -> metabolism -> death/reproduction.
 use crate::brain::{self, GENOME_LEN, IN, LEARN_LEN};
-use crate::creatures::{Creatures, CARNIVORE, HERBIVORE};
+use crate::creatures::{Creatures, CARNIVORE, HERBIVORE, MAX, MEM_LEN};
 use crate::elite::Elites;
 use crate::rng::Rng;
 use crate::spatial::SpatialHash;
@@ -13,6 +13,8 @@ pub const START_ENERGY: f32 = 40.0;
 pub const MAX_ENERGY: f32 = 100.0;
 const BASE_COST: f32 = 0.04;
 const BRAIN_COST: f32 = 0.0008; // per hidden unit: intelligence has a price
+const SIGNAL_COST: f32 = 0.006; // emitting light costs energy (scaled by the signal strength)
+const DANGER_RADIUS: f32 = 8.0; // how far a herbivore senses carnivores
 const EAT_BITE: f32 = 0.25;
 const EAT_COST: f32 = 0.03; // trying to eat costs a little: "always eat" is no longer free
 const EAT_GAIN: f32 = 12.0; // one bite = ~3 energy ≈ 60 ticks of life: creatures must keep looking for food
@@ -139,6 +141,54 @@ pub fn mean_hidden(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
+/// Share of the active hidden neurons of a species that are of kind `kind` (see `brain::ACT_*`), 0..1.
+pub fn kind_share(c: &Creatures, species: u8, kind: usize) -> f32 {
+    let (mut hits, mut total) = (0u32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            let g = &c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN];
+            for h in 0..brain::hidden_count(g) {
+                total += 1;
+                if brain::activation_of(g, h) == kind {
+                    hits += 1;
+                }
+            }
+        }
+    }
+    if total == 0 { 0.0 } else { hits as f32 / total as f32 }
+}
+
+/// Mean absolute weight from the later-added inputs (danger, light, memory) into the active hidden
+/// neurons: how much evolution has wired the new senses in.
+pub fn new_sense_wiring(c: &Creatures, species: u8) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            let g = &c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN];
+            for h in 0..brain::hidden_count(g) {
+                for k in brain::FIRST_NEW_INPUT..IN {
+                    let w = g[brain::W1 + h * IN + k];
+                    sum += if w < 0.0 { -w } else { w };
+                    n += 1;
+                }
+            }
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
+/// Mean light signal (0..1) emitted by a species.
+pub fn mean_signal(c: &Creatures, species: u8) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            sum += c.signal[i];
+            n += 1;
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
 /// Mean value of physical trait `k` (see `traits.rs`) over a species; 0 if the species is absent.
 pub fn mean_trait(c: &Creatures, species: u8, k: usize) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0u32);
@@ -232,13 +282,42 @@ pub fn maintain(c: &mut Creatures, elites: &mut Elites, env: &Env, rng: &mut Rng
     born
 }
 
-/// Advances one tick. `grid` is rebuilt here.
-pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut Rng) {
+/// Neighbourhood grids, rebuilt every tick: one over all creatures, one over the carnivores only
+/// (so that herbivores can sense danger at a cost that does not grow with the herd).
+pub struct Grids {
+    pub all: SpatialHash,
+    pub pred: SpatialHash,
+    pred_x: [f32; MAX],
+    pred_y: [f32; MAX],
+}
+
+impl Grids {
+    pub const fn new() -> Self {
+        Grids { all: SpatialHash::new(), pred: SpatialHash::new(), pred_x: [0.0; MAX], pred_y: [0.0; MAX] }
+    }
+
+    fn rebuild(&mut self, c: &Creatures, w: usize, h: usize) {
+        self.all.build(&c.x, &c.y, c.count, w, h);
+        let mut k = 0;
+        for i in 0..c.count {
+            if c.species[i] == CARNIVORE {
+                self.pred_x[k] = c.x[i];
+                self.pred_y[k] = c.y[i];
+                k += 1;
+            }
+        }
+        self.pred.build(&self.pred_x, &self.pred_y, k, w, h);
+    }
+}
+
+/// Advances one tick. The grids are rebuilt here.
+pub fn step(c: &mut Creatures, grids: &mut Grids, env: &mut Env, rng: &mut Rng) {
     let n = c.count;
     if n == 0 {
         return;
     }
-    grid.build(&c.x, &c.y, n, env.w, env.h);
+    grids.rebuild(c, env.w, env.h);
+    let grid = &grids.all;
     for i in 0..n {
         let g = i * GENOME_LEN;
         let (x, y, a) = (c.x[i], c.y[i], c.angle[i]);
@@ -270,14 +349,33 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             }
             input[5 + k] = if env.blocked(sx, sy) { 1.0 } else { 0.0 };
         }
-        // neighbours: stop counting at 11 (self + 10), the input is capped at 1 anyway
-        let near = grid.count_up_to(&c.x, &c.y, x, y, 6.0, 11);
-        input[8] = (near.saturating_sub(1) as f32 / 10.0).min(1.0);
+        // neighbours (self + up to 10 others: the input is capped at 1 anyway) and the light they emit
+        let (mut near, mut light) = (0u32, 0.0f32);
+        grid.visit_up_to(&c.x, &c.y, x, y, 6.0, 11, |j| {
+            if j != i {
+                near += 1;
+                light += c.signal[j];
+            }
+        });
+        input[8] = (near as f32 / 10.0).min(1.0);
         input[9] = env.daylight;
+        // input 10: danger, i.e. carnivores close by (only herbivores have predators)
+        if c.species[i] == HERBIVORE {
+            let k = grids.pred.count_up_to(&grids.pred_x, &grids.pred_y, x, y, DANGER_RADIUS, 3);
+            input[10] = k as f32 / 3.0;
+        }
+        // input 11: mean light of the neighbours; inputs 12-13: memory (previous activation of hidden units 0, 1)
+        input[11] = if near > 0 { light / near as f32 } else { 0.0 };
+        let mi = i * MEM_LEN;
+        input[12] = c.memory[mi];
+        input[13] = c.memory[mi + 1];
 
         // --- decision ---
         let l = i * LEARN_LEN;
         let (out, hid) = brain::forward_learn(&c.genome[g..g + GENOME_LEN], &c.learned[l..l + LEARN_LEN], &input);
+        c.memory[mi] = hid[0];
+        c.memory[mi + 1] = hid[1];
+        c.signal[i] = (out[4] + 1.0) * 0.5; // light signal in 0..1
         let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED * speed_gene;
         let na = a + out[1] * 0.35;
         let (nx, ny) = (x + cos(na) * speed, y + sin(na) * speed);
@@ -296,7 +394,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
         let base = if c.species[i] == CARNIVORE { BASE_COST * 1.3 } else { BASE_COST };
         // upkeep grows with body size, long sight costs extra, and moving costs more for bigger / faster bodies
-        c.energy[i] -= base * traits::upkeep(size) + base * 0.1 * (vision - 1.0) + moved * moved * 0.12 * size + nh * BRAIN_COST;
+        c.energy[i] -= base * traits::upkeep(size) + base * 0.1 * (vision - 1.0) + moved * moved * 0.12 * size + nh * BRAIN_COST + SIGNAL_COST * c.signal[i];
 
         // --- eating (herbivores) ---
         if out[2] > 0.0 && c.species[i] == HERBIVORE {
@@ -377,7 +475,7 @@ mod tests {
 
     struct Sim {
         c: Box<Creatures>,
-        grid: Box<SpatialHash>,
+        grid: Box<Grids>,
         biome: Vec<u8>,
         grass: Vec<f32>,
         rng: Rng,
@@ -406,7 +504,7 @@ mod tests {
         }
         let mut elites = unsafe { Box::<Elites>::new_zeroed().assume_init() };
         elites.clear();
-        Sim { c, grid: Box::new(SpatialHash::new()), biome, grass, rng, elites }
+        Sim { c, grid: Box::new(Grids::new()), biome, grass, rng, elites }
     }
 
     fn run(s: &mut Sim, ticks: u32) {
@@ -460,8 +558,8 @@ mod tests {
         }
         let blank = [0.0f32; GENOME_LEN];
         let mut hunter = blank;
-        hunter[GENOME_LEN - 1] = 4.0; // hidden units
-        hunter[GENOME_LEN - 1 - brain::OUT + 2] = 5.0; // always attack
+        hunter[brain::HID_GENE] = 4.0; // hidden units
+        hunter[brain::B2 + 2] = 5.0; // always attack
         let h = s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &hunter).unwrap();
         s.c.set_traits(h, &[1.0, 1.0, 1.0, 0.5]);
         let giant = s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &blank).unwrap();
@@ -483,9 +581,8 @@ mod tests {
         let mut s = sim(7, 0);
         // a parent whose brain always wants to reproduce (output 3 bias strongly positive) and is rich
         let mut g = [0.0f32; GENOME_LEN];
-        g[GENOME_LEN - 1] = 4.0; // hidden units
-        let b2 = GENOME_LEN - 1 - brain::OUT; // start of b2
-        g[b2 + 3] = 6.0;
+        g[brain::HID_GENE] = 4.0; // hidden units
+        g[brain::B2 + 3] = 6.0; // output 3 (reproduce) strongly positive
         let p = s.c.spawn(60.0, 60.0, 0.0, 95.0, HERBIVORE, 0, &g).unwrap();
         s.c.set_traits(p, &[1.3, 0.8, 1.5, 0.2]);
         s.c.age[p] = 500;
@@ -615,9 +712,8 @@ mod tests {
         let g = [0.0; GENOME_LEN];
         // a predator with a forced "eat/attack" brain (positive output-2 bias) next to a prey
         let mut gp = g;
-        gp[brain::GENOME_LEN - 1] = 4.0;
-        let b2 = brain::GENOME_LEN - 1 - brain::OUT; // start of b2
-        gp[b2 + 2] = 5.0;
+        gp[brain::HID_GENE] = 4.0;
+        gp[brain::B2 + 2] = 5.0;
         s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &gp);
         s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &g);
         for cell in s.biome.iter_mut() {
@@ -680,7 +776,7 @@ mod tests {
                 }
             }
             println!(
-                "t={:6} herb={:5} carn={:3} size={:.3}±{:.3} speed={:.3} vision={:.3} comp={:.3}",
+                "t={:6} herb={:5} carn={:3} size={:.3}±{:.3} speed={:.3} vision={:.3} comp={:.3} kinds[tanh bump step wave]=[{:.2} {:.2} {:.2} {:.2}] wiring={:.3} light={:.2}",
                 (chunk + 1) * step_len,
                 count_species(&s.c, HERBIVORE),
                 count_species(&s.c, CARNIVORE),
@@ -688,7 +784,13 @@ mod tests {
                 if k > 0 { (var / k as f32).sqrt() } else { 0.0 },
                 mean_trait(&s.c, HERBIVORE, traits::SPEED),
                 mean_trait(&s.c, HERBIVORE, traits::VISION),
-                mean_competence(&s.c, HERBIVORE)
+                mean_competence(&s.c, HERBIVORE),
+                kind_share(&s.c, HERBIVORE, brain::ACT_TANH),
+                kind_share(&s.c, HERBIVORE, brain::ACT_BUMP),
+                kind_share(&s.c, HERBIVORE, brain::ACT_STEP),
+                kind_share(&s.c, HERBIVORE, brain::ACT_WAVE),
+                new_sense_wiring(&s.c, HERBIVORE),
+                mean_signal(&s.c, HERBIVORE)
             );
         }
     }

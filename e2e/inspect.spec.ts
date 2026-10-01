@@ -21,6 +21,10 @@ test("the inspector shows a creature and its brain", async ({ page }) => {
   // heritable body plan: size multiplier near 1 for a founder
   await expect(page.getByTestId('inspector-size')).toHaveText(/×(0\.9\d|1\.0\d|1\.10)/)
   await expect(page.getByTestId('brain')).toBeVisible()
+  // new neurons: founders only have classic (tanh) neurons and a light signal that starts nearly dark
+  await expect(page.getByTestId('inspector-kinds')).toContainText('Classique')
+  await expect(page.getByTestId('inspector-light')).toHaveText(/^\d+ %$/)
+  await expect(page.locator('[data-testid="brain"] g[data-kind="tanh"]').first()).toBeVisible()
   await page.screenshot({ path: 'artifacts/screens/inspector.png' })
 
   // the card follows the creature as time passes

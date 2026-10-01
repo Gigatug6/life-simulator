@@ -81,6 +81,35 @@ impl SpatialHash {
         n
     }
 
+    /// Calls `f(index)` for the first `cap` points found within `r` of (x, y) (bounded cost at high
+    /// density, like `count_up_to`). Returns how many were visited.
+    pub fn visit_up_to<F: FnMut(usize)>(&self, xs: &[f32], ys: &[f32], x: f32, y: f32, r: f32, cap: u32, mut f: F) -> u32 {
+        if self.cols == 0 {
+            return 0;
+        }
+        let (x0, y0) = self.cell_xy(x - r, y - r);
+        let (x1, y1) = self.cell_xy(x + r, y + r);
+        let r2 = r * r;
+        let mut n = 0;
+        for cy in y0..=y1 {
+            for cx in x0..=x1 {
+                let c = cy * self.cols + cx;
+                for k in self.start[c]..self.start[c + 1] {
+                    let i = self.items[k as usize] as usize;
+                    let (dx, dy) = (xs[i] - x, ys[i] - y);
+                    if dx * dx + dy * dy <= r2 {
+                        f(i);
+                        n += 1;
+                        if n >= cap {
+                            return n;
+                        }
+                    }
+                }
+            }
+        }
+        n
+    }
+
     /// Calls `f(index, distance²)` for every point within `r` of (x, y).
     pub fn query<F: FnMut(usize, f32)>(&self, xs: &[f32], ys: &[f32], x: f32, y: f32, r: f32, mut f: F) {
         if self.cols == 0 {
@@ -143,6 +172,30 @@ mod tests {
             grid.query(&xs, &ys, qx, qy, 6.0, |_, _| all += 1);
             assert_eq!(grid.count_up_to(&xs, &ys, qx, qy, 6.0, u32::MAX), all);
             assert_eq!(grid.count_up_to(&xs, &ys, qx, qy, 6.0, 3), all.min(3));
+        }
+    }
+
+    #[test]
+    fn visit_up_to_visits_the_same_points_and_respects_the_cap() {
+        let (w, h, n) = (100usize, 100usize, 1500usize);
+        let mut rng = Rng::new(6);
+        let xs: Vec<f32> = (0..n).map(|_| rng.next_f32() * w as f32).collect();
+        let ys: Vec<f32> = (0..n).map(|_| rng.next_f32() * h as f32).collect();
+        let mut grid = Box::new(SpatialHash::new());
+        grid.build(&xs, &ys, n, w, h);
+        for _ in 0..30 {
+            let (qx, qy) = (rng.next_f32() * w as f32, rng.next_f32() * h as f32);
+            let mut all = Vec::new();
+            grid.query(&xs, &ys, qx, qy, 7.0, |i, _| all.push(i));
+            let mut seen = Vec::new();
+            let visited = grid.visit_up_to(&xs, &ys, qx, qy, 7.0, u32::MAX, |i| seen.push(i));
+            assert_eq!(visited as usize, all.len());
+            all.sort();
+            seen.sort();
+            assert_eq!(all, seen);
+            let mut few = 0;
+            assert_eq!(grid.visit_up_to(&xs, &ys, qx, qy, 7.0, 4, |_| few += 1), all.len().min(4) as u32);
+            assert_eq!(few as usize, all.len().min(4));
         }
     }
 

@@ -40,6 +40,8 @@ export interface Inspected {
   generation: number
   species: number
   hidden: number
+  /** Light signal 0..1 currently emitted. */
+  signal: number
   genome: Float32Array
   /** Heritable physical traits: size, speed and vision multipliers (around 1) and the lineage hue (0..1). */
   traits: { size: number; speed: number; vision: number; hue: number }
@@ -67,6 +69,8 @@ export interface Frame {
   angle: Float32Array
   energy: Float32Array
   species: Uint8Array
+  /** Light signal 0..1 emitted by each creature (bioluminescence). */
+  signal: Float32Array
   /** Body-size multiplier per creature (around 1). */
   size: Float32Array
   /** Lineage hue per creature (0..1). */

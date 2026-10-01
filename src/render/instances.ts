@@ -16,13 +16,15 @@ export function writeInstances(
   species: Uint8Array,
   size: Float32Array,
   hue: Float32Array,
+  signal: Float32Array,
   zoom: number,
   matrices: Float32Array,
   colors: Float32Array,
 ) {
   const base = creatureSize(zoom)
   for (let i = 0; i < n; i++) {
-    const s = base * size[i]! // heritable body size
+    // heritable body size; a glowing creature is drawn a little bigger (its halo)
+    const s = base * size[i]! * (1 + 0.35 * signal[i]!)
     // the world y axis points down: in the scene, y and the angle are flipped
     const a = -angle[i]!
     const c = Math.cos(a) * s
@@ -47,8 +49,10 @@ export function writeInstances(
     const [r, g, b] = lineageRgb(species[i]!, hue[i]!)
     // brightness follows the energy relative to this body's own capacity (bigger bodies store more)
     const k = 0.45 + 0.55 * Math.min(1, Math.max(0, energy[i]! / (MAX_ENERGY * size[i]!)))
-    colors[i * 3] = r * k
-    colors[i * 3 + 1] = g * k
-    colors[i * 3 + 2] = b * k
+    // light signal: the colour washes out towards white-hot as the creature glows
+    const glow = signal[i]! * 0.75
+    colors[i * 3] = r * k + (1 - r * k) * glow
+    colors[i * 3 + 1] = g * k + (1 - g * k) * glow
+    colors[i * 3 + 2] = b * k + (1 - b * k) * glow
   }
 }

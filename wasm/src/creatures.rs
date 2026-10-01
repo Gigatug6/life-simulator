@@ -2,6 +2,9 @@
 use crate::brain::{GENOME_LEN, LEARN_LEN};
 use crate::traits::{self, TRAIT_LEN};
 
+/// Memory cells per creature: the previous tick's activation of the first two hidden neurons.
+pub const MEM_LEN: usize = 2;
+
 pub const MAX: usize = 20_000;
 
 pub const HERBIVORE: u8 = 0;
@@ -26,6 +29,10 @@ pub struct Creatures {
     pub learned: [f32; MAX * LEARN_LEN],
     /// Physical traits (size, speed, vision, hue), TRAIT_LEN f32 per creature.
     pub traits: [f32; MAX * TRAIT_LEN],
+    /// Recurrent memory (fed back as brain inputs), MEM_LEN f32 per creature.
+    pub memory: [f32; MAX * MEM_LEN],
+    /// Light signal 0..1 emitted this tick (bioluminescence), sensed by neighbours.
+    pub signal: [f32; MAX],
 }
 
 impl Creatures {
@@ -44,6 +51,8 @@ impl Creatures {
             genome: [0.0; MAX * GENOME_LEN],
             learned: [0.0; MAX * LEARN_LEN],
             traits: [0.0; MAX * TRAIT_LEN],
+            memory: [0.0; MAX * MEM_LEN],
+            signal: [0.0; MAX],
         }
     }
 
@@ -70,6 +79,8 @@ impl Creatures {
         self.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN].copy_from_slice(&genome[..GENOME_LEN]);
         self.learned[i * LEARN_LEN..(i + 1) * LEARN_LEN].fill(0.0);
         self.traits[i * TRAIT_LEN..(i + 1) * TRAIT_LEN].copy_from_slice(&traits::DEFAULT);
+        self.memory[i * MEM_LEN..(i + 1) * MEM_LEN].fill(0.0);
+        self.signal[i] = 0.0;
         self.count += 1;
         Some(i)
     }
@@ -97,6 +108,8 @@ impl Creatures {
             self.genome.copy_within(last * GENOME_LEN..(last + 1) * GENOME_LEN, i * GENOME_LEN);
             self.learned.copy_within(last * LEARN_LEN..(last + 1) * LEARN_LEN, i * LEARN_LEN);
             self.traits.copy_within(last * TRAIT_LEN..(last + 1) * TRAIT_LEN, i * TRAIT_LEN);
+            self.memory.copy_within(last * MEM_LEN..(last + 1) * MEM_LEN, i * MEM_LEN);
+            self.signal[i] = self.signal[last];
         }
         self.count = last;
     }
@@ -152,6 +165,18 @@ mod tests {
         e.set_traits(1, &[1.4, 0.7, 1.2, 0.25]);
         e.kill(0);
         assert_eq!(&e.traits[..TRAIT_LEN], &[1.4, 0.7, 1.2, 0.25]);
+        // memory and light signal follow too
+        let mut f = boxed();
+        f.spawn(0.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
+        f.spawn(1.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
+        f.memory[MEM_LEN] = 0.5;
+        f.memory[MEM_LEN + 1] = -0.25;
+        f.signal[1] = 0.9;
+        f.kill(0);
+        assert_eq!((f.memory[0], f.memory[1], f.signal[0]), (0.5, -0.25, 0.9));
+        // a fresh creature has no memory and emits no light
+        f.spawn(2.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
+        assert_eq!((f.memory[MEM_LEN], f.signal[1]), (0.0, 0.0));
         c.kill(10); // out of bounds: ignored
         assert_eq!(c.count, 2);
     }
