@@ -11,6 +11,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 pub mod creatures;
 pub mod plants;
 pub mod rng;
+pub mod spatial;
 pub mod world;
 
 static mut TICKS: u32 = 0;
