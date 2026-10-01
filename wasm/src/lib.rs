@@ -8,6 +8,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
     core::arch::wasm32::unreachable()
 }
 
+pub mod creatures;
 pub mod plants;
 pub mod rng;
 pub mod world;
@@ -43,6 +44,7 @@ pub extern "C" fn add(a: i32, b: i32) -> i32 {
 
 static mut ALTITUDE: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
 static mut GRASS: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
+static mut CREATURES: creatures::Creatures = creatures::Creatures::new();
 static mut RAIN: f32 = 0.0;
 static mut SEED: u32 = 0;
 static mut BIOME: [u8; world::MAX_W * world::MAX_H] = [0; world::MAX_W * world::MAX_H];
@@ -67,6 +69,7 @@ pub extern "C" fn world_init(seed: u32, w: u32, h: u32) -> u32 {
         }
         TICKS = 0;
         RAIN = 0.0;
+        (*core::ptr::addr_of_mut!(CREATURES)).clear();
         SEED = seed;
         WIDTH = w;
         HEIGHT = h;
@@ -126,6 +129,80 @@ pub extern "C" fn world_restore(seed: u32, w: u32, h: u32, tick: u32, rain: f32)
         RAIN = rain;
     }
     0
+}
+
+/// Crée une créature (espèce 0 herbivore, 1 carnivore) ; renvoie son index ou -1 si plein.
+#[no_mangle]
+pub extern "C" fn creature_spawn(x: f32, y: f32, species: u32) -> i32 {
+    unsafe {
+        let c = &mut *core::ptr::addr_of_mut!(CREATURES);
+        match c.spawn(x, y, 0.0, 50.0, species as u8, 0) {
+            Some(i) => i as i32,
+            None => -1,
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn creature_kill(i: u32) {
+    unsafe { (*core::ptr::addr_of_mut!(CREATURES)).kill(i as usize) }
+}
+
+#[no_mangle]
+pub extern "C" fn creature_count() -> u32 {
+    unsafe { (*core::ptr::addr_of!(CREATURES)).count as u32 }
+}
+
+#[no_mangle]
+pub extern "C" fn creature_next_id() -> u32 {
+    unsafe { (*core::ptr::addr_of!(CREATURES)).next_id }
+}
+
+/// Restaure le compteur après que l'hôte a recopié les tableaux de créatures.
+#[no_mangle]
+pub extern "C" fn creatures_restore(count: u32, next_id: u32) -> u32 {
+    if count as usize > creatures::MAX {
+        return 1;
+    }
+    unsafe {
+        let c = &mut *core::ptr::addr_of_mut!(CREATURES);
+        c.count = count as usize;
+        c.next_id = next_id;
+    }
+    0
+}
+
+#[no_mangle]
+pub extern "C" fn creature_x_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.x) as *const f32 }
+}
+#[no_mangle]
+pub extern "C" fn creature_y_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.y) as *const f32 }
+}
+#[no_mangle]
+pub extern "C" fn creature_angle_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.angle) as *const f32 }
+}
+#[no_mangle]
+pub extern "C" fn creature_energy_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.energy) as *const f32 }
+}
+#[no_mangle]
+pub extern "C" fn creature_age_ptr() -> *const u32 {
+    unsafe { core::ptr::addr_of!(CREATURES.age) as *const u32 }
+}
+#[no_mangle]
+pub extern "C" fn creature_id_ptr() -> *const u32 {
+    unsafe { core::ptr::addr_of!(CREATURES.id) as *const u32 }
+}
+#[no_mangle]
+pub extern "C" fn creature_generation_ptr() -> *const u16 {
+    unsafe { core::ptr::addr_of!(CREATURES.generation) as *const u16 }
+}
+#[no_mangle]
+pub extern "C" fn creature_species_ptr() -> *const u8 {
+    unsafe { core::ptr::addr_of!(CREATURES.species) as *const u8 }
 }
 
 /// Pointeur vers l'herbe f32 (w*h), valeurs 0..capacité.

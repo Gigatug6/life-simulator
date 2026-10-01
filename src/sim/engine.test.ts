@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { Biome, altitudeView, biomeView, grassView, loadEngine } from './engine'
+import { Biome, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
@@ -48,5 +48,21 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(dry.after).toBeGreaterThan(dry.before)
     expect(wet.after).toBeGreaterThan(dry.after)
     expect(dry.season).toBe(0)
+  })
+
+  it('gère les créatures (spawn, kill par échange, id stables)', async () => {
+    const e = await loadEngine(readFileSync(wasmPath))
+    e.world_init(1, 32, 32)
+    expect(e.creature_spawn(1, 2, 0)).toBe(0)
+    expect(e.creature_spawn(3, 4, 1)).toBe(1)
+    expect(e.creature_count()).toBe(2)
+    const ids = Array.from(creatureView(e, 'id'))
+    expect(new Set(ids).size).toBe(2)
+    e.creature_kill(0)
+    expect(e.creature_count()).toBe(1)
+    expect(creatureView(e, 'id')[0]).toBe(ids[1])
+    expect(creatureView(e, 'x')[0]).toBe(3)
+    e.world_init(1, 32, 32)
+    expect(e.creature_count()).toBe(0)
   })
 })

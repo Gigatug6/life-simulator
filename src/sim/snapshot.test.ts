@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { grassView, loadEngine } from './engine'
+import { creatureView, grassView, loadEngine } from './engine'
 import { restoreSnapshot, takeSnapshot } from './snapshot'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
@@ -10,6 +10,10 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     const a = await loadEngine(readFileSync(wasmPath))
     a.world_init(7, 96, 80)
     for (let i = 0; i < 300; i++) a.tick()
+    a.creature_spawn(10.5, 20.25, 0)
+    a.creature_spawn(30, 40, 1)
+    a.creature_spawn(50, 60, 0)
+    a.creature_kill(0)
     a.world_set_rain(0.5)
     const snap = takeSnapshot(a)
 
@@ -19,6 +23,10 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     expect(b.world_seed()).toBe(7)
     expect(b.world_rain()).toBeCloseTo(0.5)
     expect(takeSnapshot(b)).toEqual(snap)
+    expect(b.creature_count()).toBe(2)
+    expect(Array.from(creatureView(b, 'species'))).toEqual([0, 1])
+    expect(creatureView(b, 'x')[1]).toBe(30)
+    expect(b.creature_next_id()).toBe(a.creature_next_id())
 
     for (let i = 0; i < 200; i++) {
       a.tick()

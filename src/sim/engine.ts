@@ -16,6 +16,19 @@ export interface LifeExports {
   world_tick(): number
   world_rain(): number
   world_restore(seed: number, w: number, h: number, tick: number, rain: number): number
+  creature_spawn(x: number, y: number, species: number): number
+  creature_kill(i: number): void
+  creature_count(): number
+  creature_next_id(): number
+  creatures_restore(count: number, nextId: number): number
+  creature_x_ptr(): number
+  creature_y_ptr(): number
+  creature_angle_ptr(): number
+  creature_energy_ptr(): number
+  creature_age_ptr(): number
+  creature_id_ptr(): number
+  creature_generation_ptr(): number
+  creature_species_ptr(): number
   memory: WebAssembly.Memory
 }
 
@@ -41,4 +54,24 @@ export function altitudeView(e: LifeExports): Float32Array {
 
 export function grassView(e: LifeExports): Float32Array {
   return new Float32Array(e.memory.buffer, e.world_grass_ptr(), e.world_width() * e.world_height())
+}
+
+/** Champs SoA des créatures : nom, taille d'un élément, constructeur de vue, getter de pointeur. */
+export const CREATURE_FIELDS = [
+  { name: 'x', size: 4, ptr: 'creature_x_ptr', ctor: Float32Array },
+  { name: 'y', size: 4, ptr: 'creature_y_ptr', ctor: Float32Array },
+  { name: 'angle', size: 4, ptr: 'creature_angle_ptr', ctor: Float32Array },
+  { name: 'energy', size: 4, ptr: 'creature_energy_ptr', ctor: Float32Array },
+  { name: 'age', size: 4, ptr: 'creature_age_ptr', ctor: Uint32Array },
+  { name: 'id', size: 4, ptr: 'creature_id_ptr', ctor: Uint32Array },
+  { name: 'generation', size: 2, ptr: 'creature_generation_ptr', ctor: Uint16Array },
+  { name: 'species', size: 1, ptr: 'creature_species_ptr', ctor: Uint8Array },
+] as const
+
+export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
+
+/** Vue sur un champ des créatures vivantes (valide jusqu'à la prochaine croissance mémoire). */
+export function creatureView(e: LifeExports, name: CreatureField) {
+  const f = CREATURE_FIELDS.find((c) => c.name === name)!
+  return new f.ctor(e.memory.buffer, e[f.ptr](), e.creature_count())
 }
