@@ -8,6 +8,8 @@ export interface Sample {
   /** Intelligence index 0-100 (null: species absent, or data older than this field). */
   iqHerbivores?: number | null
   iqCarnivores?: number | null
+  /** Mean herbivore body plan (size / speed / vision multipliers); null when absent or for older data. */
+  body?: { size: number; speed: number; vision: number } | null
 }
 
 export const MAX_POINTS = 600

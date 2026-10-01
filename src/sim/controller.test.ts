@@ -142,9 +142,14 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     expect(f.iqHerbivores!).toBeGreaterThanOrEqual(0)
     expect(f.iqHerbivores!).toBeLessThanOrEqual(100)
     expect(f.iqCarnivores).not.toBeNull()
+    // mean herbivore body plan: founders are within ±10 % of the default plan
+    expect(f.bodyHerbivores).not.toBeNull()
+    for (const v of [f.bodyHerbivores!.size, f.bodyHerbivores!.speed, f.bodyHerbivores!.vision]) expect(Math.abs(v - 1)).toBeLessThan(0.1)
     sim.engine.world_init(5, 64, 64)
     sim.engine.world_populate(0, 20)
     const g = new SimController(sim.engine).frame()
     expect(g.iqCarnivores).toBeNull()
+    sim.engine.world_meteor(32, 32, 500)
+    expect(new SimController(sim.engine).frame().bodyHerbivores).toBeNull() // nobody left
   })
 })

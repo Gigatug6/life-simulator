@@ -46,5 +46,7 @@ describe('History', () => {
     const h = History.fromJSON({ every: 60, points: [old, { ...old, tick: 60, iqHerbivores: 12.5, iqCarnivores: null }] })
     expect(h.points.length).toBe(2)
     expect(h.points[1]!.iqHerbivores).toBe(12.5)
+    const withBody = History.fromJSON({ every: 60, points: [{ ...old, body: { size: 1.1, speed: 0.9, vision: 1 } }] })
+    expect(withBody.points[0]!.body?.size).toBe(1.1)
   })
 })

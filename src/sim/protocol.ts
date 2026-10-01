@@ -58,6 +58,8 @@ export interface Frame {
   /** Intelligence index 0-100 per species (null if the species is absent). */
   /** Number of rebirths (herbivores almost extinct, repopulated from the best ancestors). */
   rescues: number
+  /** Mean body plan of the herbivores (multipliers around 1), null if there are none. */
+  bodyHerbivores: { size: number; speed: number; vision: number } | null
   iqHerbivores: number | null
   iqCarnivores: number | null
   x: Float32Array

@@ -12,7 +12,8 @@ export class SimController {
   speed: Speed = 1
   selectedId: number | null = null
   private frames = 0
-  private iq: { herb: number | null; carn: number | null } = { herb: null, carn: null }
+  // slow statistics (recomputed every IQ_EVERY frames): intelligence index and mean herbivore body plan
+  private iq: { herb: number | null; carn: number | null; body: Frame['bodyHerbivores'] } = { herb: null, carn: null, body: null }
   private catchup: { total: number; done: number; startedAt: number; maxMs: number } | null = null
 
   constructor(readonly engine: LifeExports) {}
@@ -133,6 +134,7 @@ export class SimController {
       rescues: e.world_rescues(),
       iqHerbivores: this.iq.herb,
       iqCarnivores: this.iq.carn,
+      bodyHerbivores: this.iq.body,
       x: creatureView(e, 'x').slice(),
       y: creatureView(e, 'y').slice(),
       angle: creatureView(e, 'angle').slice(),
@@ -158,7 +160,11 @@ export class SimController {
   private computeIq() {
     const e = this.engine
     const of = (species: number) => (e.stats_count(species) > 0 ? intelligenceIndex(e.stats_competence(species)) : null)
-    return { herb: of(0), carn: of(1) }
+    const body =
+      e.stats_count(0) > 0
+        ? { size: e.stats_mean_trait(0, Trait.Size), speed: e.stats_mean_trait(0, Trait.Speed), vision: e.stats_mean_trait(0, Trait.Vision) }
+        : null
+    return { herb: of(0), carn: of(1), body }
   }
 
   spawn(x: number, y: number, species: number, count: number) {

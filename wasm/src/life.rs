@@ -25,6 +25,7 @@ const MUT_SIGMA: f32 = 0.15;
 const LOOK: f32 = 3.0; // sensor distance
 const STRIKE_RANGE: f32 = 1.8;
 const KILL_GAIN: f32 = 0.6; // share of the prey's energy recovered
+const BIG_PREY_RATIO: f32 = 1.3; // hunters cannot take down prey larger than this multiple of their own size
 const PI: f32 = 3.1415927;
 
 /// Approximate sin (no libm in no_std), accuracy ~1e-3.
@@ -295,14 +296,14 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
         let base = if c.species[i] == CARNIVORE { BASE_COST * 1.3 } else { BASE_COST };
         // upkeep grows with body size, long sight costs extra, and moving costs more for bigger / faster bodies
-        c.energy[i] -= base * traits::upkeep(size) + base * 0.3 * (vision - 1.0) + moved * moved * 0.12 * size + nh * BRAIN_COST;
+        c.energy[i] -= base * traits::upkeep(size) + base * 0.1 * (vision - 1.0) + moved * moved * 0.12 * size + nh * BRAIN_COST;
 
         // --- eating (herbivores) ---
         if out[2] > 0.0 && c.species[i] == HERBIVORE {
             c.energy[i] -= EAT_COST;
             reward -= EAT_COST;
             if let Some(cell) = env.cell(c.x[i], c.y[i]) {
-                let max_bite = EAT_BITE * size; // bigger mouths take bigger bites
+                let max_bite = EAT_BITE * size * size; // bigger mouths take much bigger bites (feast vs famine trade-off)
                 let bite = if env.grass[cell] < max_bite { env.grass[cell] } else { max_bite };
                 env.grass[cell] -= bite;
                 c.energy[i] = (c.energy[i] + bite * EAT_GAIN).min(max_energy);
@@ -314,7 +315,9 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         if out[2] > 0.0 && c.species[i] == CARNIVORE {
             let mut best: Option<(usize, f32)> = None;
             grid.query(&c.x, &c.y, c.x[i], c.y[i], STRIKE_RANGE + 0.5 * (size - 1.0), |j, d2| {
-                if c.species[j] == HERBIVORE && c.energy[j] > 0.0 && best.map_or(true, |(_, bd)| d2 < bd) {
+                // a prey much bigger than the hunter cannot be taken down (size is a defence)
+                let too_big = c.traits[j * TRAIT_LEN + traits::SIZE] > size * BIG_PREY_RATIO;
+                if c.species[j] == HERBIVORE && c.energy[j] > 0.0 && !too_big && best.map_or(true, |(_, bd)| d2 < bd) {
                     best = Some((j, d2));
                 }
             });
@@ -424,6 +427,8 @@ mod tests {
         // identical blank brains, no food at all: only the body plan differs
         let mut s = sim(6, 0);
         s.grass.iter_mut().for_each(|g| *g = 0.0);
+        // uniform land, so that every creature moves exactly the same way (no path-dependent noise)
+        s.biome.iter_mut().for_each(|b| *b = world::PLAIN);
         let blank = [0.0f32; GENOME_LEN];
         let plans: [[f32; TRAIT_LEN]; 4] = [
             [1.0, 1.0, 1.0, 0.5], // reference
@@ -445,6 +450,32 @@ mod tests {
         assert!(big < reference, "a bigger body must burn more: {} vs {}", big, reference);
         assert!(small > reference, "a smaller body must burn less: {} vs {}", small, reference);
         assert!(sighted < reference, "far sight must cost extra: {} vs {}", sighted, reference);
+    }
+
+    #[test]
+    fn a_much_bigger_prey_cannot_be_taken_down() {
+        let mut s = sim(4, 0);
+        for cell in s.biome.iter_mut() {
+            *cell = world::PLAIN;
+        }
+        let blank = [0.0f32; GENOME_LEN];
+        let mut hunter = blank;
+        hunter[GENOME_LEN - 1] = 4.0; // hidden units
+        hunter[GENOME_LEN - 1 - brain::OUT + 2] = 5.0; // always attack
+        let h = s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &hunter).unwrap();
+        s.c.set_traits(h, &[1.0, 1.0, 1.0, 0.5]);
+        let giant = s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &blank).unwrap();
+        s.c.set_traits(giant, &[1.6, 1.0, 1.0, 0.5]); // 1.6 > 1.3 × 1.0
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        assert_eq!(count_species(&s.c, HERBIVORE), 1, "the giant survives the strike");
+        // a normal-sized prey in the same spot is taken down
+        let normal = s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &blank).unwrap();
+        s.c.set_traits(normal, &[1.2, 1.0, 1.0, 0.5]); // 1.2 <= 1.3
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        assert_eq!(count_species(&s.c, HERBIVORE), 1, "one of the two prey is gone (the normal one)");
+        assert!((0..s.c.count).any(|i| s.c.species[i] == HERBIVORE && s.c.traits[i * TRAIT_LEN + traits::SIZE] > 1.5));
     }
 
     #[test]
@@ -539,7 +570,7 @@ mod tests {
         let n = a.c.count;
         assert!(n <= crate::creatures::MAX);
         for i in 0..n {
-            assert!(a.c.energy[i].is_finite() && a.c.energy[i] > 0.0 && a.c.energy[i] <= MAX_ENERGY + 1.0);
+            assert!(a.c.energy[i].is_finite() && a.c.energy[i] > 0.0 && a.c.energy[i] <= MAX_ENERGY * traits::RANGE[traits::SIZE].1 + 1.0);
             assert!(a.c.x[i] >= 0.0 && a.c.x[i] < W as f32 && a.c.y[i] >= 0.0 && a.c.y[i] < H as f32);
             assert!(a.biome[a.c.y[i] as usize * W + a.c.x[i] as usize] != DEEP_WATER);
         }
@@ -622,6 +653,42 @@ mod tests {
             println!(
                 "perf n0={:6} n_end={:6} -> {:7.0} ticks/s ({:.2} ms/tick, {:.2} us/creature/tick) [native, opt 3]",
                 n, s.c.count, 200.0 / dt, dt * 1000.0 / 200.0, dt * 1e6 / 200.0 / s.c.count as f64
+            );
+        }
+    }
+
+    #[test]
+    #[ignore] // diagnostic: cargo test traits_report -- --ignored --nocapture   (env: CARN, TICKS, SEED)
+    fn traits_report() {
+        let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        let ticks: u32 = std::env::var("TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(40_000);
+        let seed: u64 = std::env::var("SEED").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+        let mut s = sim(seed, 300);
+        add_carnivores(&mut s, nc);
+        let step_len = ticks / 20;
+        for chunk in 0..20 {
+            run_from(&mut s, chunk * step_len, step_len);
+            let n = s.c.count;
+            // spread (standard deviation) of the size trait among herbivores: is there still variety?
+            let mean = mean_trait(&s.c, HERBIVORE, traits::SIZE);
+            let mut var = 0.0f32;
+            let mut k = 0u32;
+            for i in 0..n {
+                if s.c.species[i] == HERBIVORE {
+                    var += (s.c.traits[i * TRAIT_LEN + traits::SIZE] - mean).powi(2);
+                    k += 1;
+                }
+            }
+            println!(
+                "t={:6} herb={:5} carn={:3} size={:.3}±{:.3} speed={:.3} vision={:.3} comp={:.3}",
+                (chunk + 1) * step_len,
+                count_species(&s.c, HERBIVORE),
+                count_species(&s.c, CARNIVORE),
+                mean,
+                if k > 0 { (var / k as f32).sqrt() } else { 0.0 },
+                mean_trait(&s.c, HERBIVORE, traits::SPEED),
+                mean_trait(&s.c, HERBIVORE, traits::VISION),
+                mean_competence(&s.c, HERBIVORE)
             );
         }
     }

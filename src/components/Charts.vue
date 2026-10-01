@@ -15,6 +15,16 @@ const SERIES_POP = computed(() => [
   { name: 'Herbivores', color: HERB, values: pts.value.map((p) => p.herbivores) },
   { name: 'Carnivores', color: CARN, values: pts.value.map((p) => p.carnivores) },
 ])
+// Body-plan chart: the three lines are TRAITS (not species), so they use the first three validated
+// categorical slots (blue, orange, aqua: the palette passes the all-pairs checks for 3 series) and the legend names them.
+const trait = (pick: (b: { size: number; speed: number; vision: number }) => number) =>
+  pts.value.map((p) => (p.body ? pick(p.body) : NaN))
+const SERIES_BODY = computed(() => [
+  { name: 'Taille', color: 'var(--series-1)', values: trait((b) => b.size) },
+  { name: 'Vitesse', color: 'var(--series-2)', values: trait((b) => b.speed) },
+  { name: 'Vision', color: 'var(--series-3)', values: trait((b) => b.vision) },
+])
+
 // intelligence index 0-100; NaN = species absent (line broken)
 const iq = (v: number | null | undefined) => (typeof v === 'number' ? v : NaN)
 const SERIES_IQ = computed(() => {
@@ -28,6 +38,7 @@ const SERIES_IQ = computed(() => {
 <template>
   <section v-if="xs.length > 1" class="charts" data-testid="charts" aria-label="Évolution du monde">
     <LineChart title="Population" :xs="xs" :series="SERIES_POP" :x-format="when" test-id="chart-population" />
+    <LineChart title="Corps des herbivores (moyenne)" :xs="xs" :series="SERIES_BODY" :domain="[0.6, 1.8]" :format="(v) => v.toFixed(2)" :x-format="when" test-id="chart-body" />
     <LineChart title="Intelligence (indice 0-100)" :xs="xs" :series="SERIES_IQ" :domain="[0, 100]" :format="(v) => String(Math.round(v))" :x-format="when" test-id="chart-intelligence" />
   </section>
 </template>
@@ -42,6 +53,7 @@ const SERIES_IQ = computed(() => {
   --grid: #3a3a37;
   --series-1: #3987e5;
   --series-2: #d95926;
+  --series-3: #199e70;
   width: 330px;
   max-width: 92vw;
   box-sizing: border-box;

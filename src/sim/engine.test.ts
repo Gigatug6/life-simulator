@@ -34,7 +34,8 @@ describe.runIf(existsSync(wasmPath))('WASM engine', () => {
       e.world_init(42, 64, 64)
       const sum = () => grassView(e).reduce((a, b) => a + b, 0)
       const before = sum()
-      for (let i = 0; i < 1500; i++) {
+      // 450 ticks: before the first rebirth check (tick 500), which would put grazers in this empty world
+      for (let i = 0; i < 450; i++) {
         if (rain && i % 100 === 0) e.world_set_rain(rain)
         e.tick()
       }
