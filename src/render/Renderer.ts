@@ -19,6 +19,8 @@ export class Renderer {
   private w = 0
   private h = 0
   private creatures: THREE.InstancedMesh
+  private ring: THREE.Mesh
+  private ringPos: { x: number; y: number } | null = null
   private lastFrame: Frame | null = null
   private uploadedZoom = 0
   private raf = 0
@@ -43,6 +45,13 @@ export class Renderer {
     this.creatures.frustumCulled = false
     this.creatures.count = 0
     this.scene.add(this.creatures)
+    this.ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.85, 1, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, depthTest: false, transparent: true }),
+    )
+    this.ring.renderOrder = 10
+    this.ring.visible = false
+    this.scene.add(this.ring)
     this.bindInput()
     this.resize()
     const loop = () => {
@@ -90,6 +99,12 @@ export class Renderer {
     this.dirty = true
   }
 
+  /** Entoure d'un anneau la créature suivie (null = aucune). */
+  setSelection(pos: { x: number; y: number } | null) {
+    this.ringPos = pos
+    this.dirty = true
+  }
+
   /** Met à jour les créatures depuis une image de simulation. */
   setCreatures(frame: Frame) {
     this.lastFrame = frame
@@ -134,6 +149,12 @@ export class Renderer {
     const v = this.view
     const hw = v.vw / 2 / v.zoom
     const hh = v.vh / 2 / v.zoom
+    if (this.ringPos) {
+      const r = Math.max(2, 14 / v.zoom)
+      this.ring.visible = true
+      this.ring.position.set(this.ringPos.x, -this.ringPos.y, 0.5)
+      this.ring.scale.set(r, r, 1)
+    } else this.ring.visible = false
     this.camera.left = -hw
     this.camera.right = hw
     this.camera.top = hh
@@ -223,6 +244,9 @@ export class Renderer {
     cancelAnimationFrame(this.raf)
     this.cleanup.forEach((f) => f())
     this.disposeTerrain()
+    this.scene.remove(this.ring)
+    this.ring.geometry.dispose()
+    ;(this.ring.material as THREE.Material).dispose()
     this.scene.remove(this.creatures)
     this.creatures.geometry.dispose()
     ;(this.creatures.material as THREE.Material).dispose()

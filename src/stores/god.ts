@@ -2,10 +2,11 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useWorldStore } from './world'
 
-export type Tool = 'observe' | 'herbivore' | 'carnivore' | 'meteor' | 'bless'
+export type Tool = 'observe' | 'inspect' | 'herbivore' | 'carnivore' | 'meteor' | 'bless'
 
 export const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: 'observe', label: 'Observer', hint: 'Regarder sans intervenir' },
+  { id: 'inspect', label: 'Inspecter', hint: 'Cliquer une créature pour voir son cerveau' },
   { id: 'herbivore', label: 'Herbivores', hint: 'Fait apparaître 10 herbivores' },
   { id: 'carnivore', label: 'Carnivores', hint: 'Fait apparaître 4 carnivores' },
   { id: 'meteor', label: 'Météorite', hint: 'Détruit tout dans le rayon' },
@@ -18,9 +19,13 @@ export const useGodStore = defineStore('god', () => {
   const radius = ref(10) // cellules
   const message = ref('')
 
-  function apply(x: number, y: number) {
+  function apply(x: number, y: number, zoom = 4) {
     const world = useWorldStore()
     switch (tool.value) {
+      case 'inspect':
+        // tolérance de 14 px à l'écran
+        message.value = world.pick(x, y, Math.max(1.5, 14 / zoom)) ? 'Créature sélectionnée' : 'Aucune créature ici'
+        break
       case 'herbivore':
         world.spawn(x, y, 0, 10)
         message.value = 'Herbivores créés'

@@ -25,9 +25,23 @@ export type ToWorker =
   | { type: 'save' }
   | { type: 'setSpeed'; speed: Speed }
   | { type: 'spawn'; x: number; y: number; species: number; count: number }
+  | { type: 'select'; id: number | null }
   | { type: 'rain'; value: number } // -1 (sécheresse) .. 1 (pluie)
   | { type: 'meteor'; x: number; y: number; r: number }
   | { type: 'bless'; x: number; y: number; r: number }
+
+/** Détails d'une créature suivie (inspecteur). */
+export interface Inspected {
+  id: number
+  x: number
+  y: number
+  energy: number
+  age: number
+  generation: number
+  species: number
+  hidden: number
+  genome: Float32Array
+}
 
 /** Image envoyée à l'UI (buffers transférés, jamais partagés). */
 export interface Frame {
@@ -44,6 +58,9 @@ export interface Frame {
   angle: Float32Array
   energy: Float32Array
   species: Uint8Array
+  id: Uint32Array
+  /** Créature suivie, ou null si aucune sélection / morte. */
+  selected: Inspected | null
   /** Herbe (w*h), présente seulement une image sur quelques-unes. */
   grass: Float32Array | null
 }

@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { loadEngine } from './engine'
+import { describeBrain } from './brain'
 import { SimController, GRASS_EVERY } from './controller'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
@@ -98,5 +99,25 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     expect(sim.engine.world_rain()).toBe(-1)
     sim.rain(-5) // borné
     expect(sim.engine.world_rain()).toBe(-1)
+  })
+
+  it("suit une créature (inspecteur) jusqu'à sa mort", async () => {
+    const sim = await make()
+    const f = sim.frame()
+    expect(f.selected).toBeNull()
+    sim.selectedId = f.id[3]!
+    const s = sim.frame().selected!
+    expect(s.id).toBe(f.id[3])
+    expect(s.x).toBe(f.x[3])
+    expect(s.genome.length).toBe(185)
+    expect(s.hidden).toBe(4) // génome initial : 4 neurones cachés
+    const brain = describeBrain(s.genome)
+    expect(brain.hidden).toBe(4)
+    expect(brain.w1.length).toBe(4)
+    expect(brain.w1[0]!.length).toBe(10)
+    expect(brain.w2.length).toBe(4)
+    expect(brain.w2[0]!.length).toBe(4)
+    sim.meteor(64, 64, 200)
+    expect(sim.frame().selected).toBeNull()
   })
 })

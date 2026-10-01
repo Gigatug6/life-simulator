@@ -3,7 +3,7 @@ import { markRaw, ref, shallowRef } from 'vue'
 import { snapshotInfo } from '../sim/snapshot'
 import { createSaveStore, type SaveStore } from '../persist/store'
 import SimWorker from '../sim/worker?worker'
-import type { Frame, FromWorker, Speed, ToWorker } from '../sim/protocol'
+import type { Frame, Inspected, FromWorker, Speed, ToWorker } from '../sim/protocol'
 
 /** État du monde côté UI. Les tableaux typés restent hors de la réactivité profonde. */
 export const useWorldStore = defineStore('world', () => {
@@ -13,6 +13,8 @@ export const useWorldStore = defineStore('world', () => {
   const ticksPerSecond = ref(0)
   const frame = shallowRef<Frame | null>(null)
   const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array } | null>(null)
+  const selectedId = ref<number | null>(null)
+  const lastSelected = shallowRef<Inspected | null>(null)
   const restored = ref(false)
   const catchup = ref<{ done: number; total: number } | null>(null)
   const savedAt = ref<number | null>(null)
@@ -40,6 +42,8 @@ export const useWorldStore = defineStore('world', () => {
     stop()
     status.value = 'Chargement du moteur…'
     frame.value = null
+    selectedId.value = null
+    lastSelected.value = null
     catchup.value = null
     saveStore = createSaveStore()
     persistent.value = saveStore.persistent
@@ -69,6 +73,7 @@ export const useWorldStore = defineStore('world', () => {
       } else if (m.type === 'terrain') terrain.value = markRaw(m)
       else if (m.type === 'frame') {
         frame.value = markRaw(m.frame)
+        if (m.frame.selected) lastSelected.value = markRaw(m.frame.selected)
         ticksPerSecond.value = m.ticksPerSecond
       } else if (m.type === 'catchup') {
         catchup.value = m.finished ? null : { done: m.done, total: m.total }
@@ -148,6 +153,30 @@ export const useWorldStore = defineStore('world', () => {
     catchup.value = null
   }
 
+  /** Sélectionne la créature la plus proche de (x, y) dans `maxDist` cellules ; sinon désélectionne. */
+  function pick(x: number, y: number, maxDist: number) {
+    const f = frame.value
+    let best = -1
+    let bestD = maxDist * maxDist
+    if (f) {
+      for (let i = 0; i < f.count; i++) {
+        const d = (f.x[i]! - x) ** 2 + (f.y[i]! - y) ** 2
+        if (d <= bestD) {
+          bestD = d
+          best = i
+        }
+      }
+    }
+    select(best >= 0 ? f!.id[best]! : null)
+    return best >= 0
+  }
+
+  function select(id: number | null) {
+    selectedId.value = id
+    if (id === null) lastSelected.value = null
+    send({ type: 'select', id })
+  }
+
   function setSpeed(s: Speed) {
     speed.value = s
     send({ type: 'setSpeed', speed: s })
@@ -155,6 +184,7 @@ export const useWorldStore = defineStore('world', () => {
 
   return {
     status, ready, speed, ticksPerSecond, frame, terrain, restored, catchup, savedAt, saveError, persistent,
+    selectedId, lastSelected, pick, select,
     start, stop, setSpeed, save, exportFile, importFile, newWorld,
     skipCatchup: () => send({ type: 'skipCatchup' }),
     spawn: (x: number, y: number, species: number, count: number) => send({ type: 'spawn', x, y, species, count }),

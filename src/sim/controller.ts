@@ -1,5 +1,6 @@
 /** Pilote le moteur WASM (boucle, vitesse, images). Indépendant du Worker pour rester testable. */
-import { biomeView, creatureView, grassView, type LifeExports } from './engine'
+import { GENOME_LEN, biomeView, creatureView, grassView, type LifeExports } from './engine'
+import { hiddenCount } from './brain'
 import { restoreSnapshot, takeSnapshot } from './snapshot'
 import { CATCHUP_MAX_MS, CATCHUP_MAX_TICKS, TICK_RATE, type Frame, type Speed } from './protocol'
 
@@ -7,6 +8,7 @@ export const GRASS_EVERY = 10 // une image sur N embarque l'herbe
 
 export class SimController {
   speed: Speed = 1
+  selectedId: number | null = null
   private frames = 0
   private catchup: { total: number; done: number; startedAt: number; maxMs: number } | null = null
 
@@ -85,6 +87,26 @@ export class SimController {
     return done
   }
 
+  /** Détails de la créature sélectionnée (null si aucune ou morte). */
+  inspect(): Frame['selected'] {
+    if (this.selectedId === null) return null
+    const e = this.engine
+    const i = creatureView(e, 'id').indexOf(this.selectedId)
+    if (i < 0) return null
+    const genome = creatureView(e, 'genome').slice(i * GENOME_LEN, (i + 1) * GENOME_LEN)
+    return {
+      id: this.selectedId,
+      x: creatureView(e, 'x')[i]!,
+      y: creatureView(e, 'y')[i]!,
+      energy: creatureView(e, 'energy')[i]!,
+      age: creatureView(e, 'age')[i]!,
+      generation: creatureView(e, 'generation')[i]!,
+      species: creatureView(e, 'species')[i]!,
+      hidden: hiddenCount(genome),
+      genome,
+    }
+  }
+
   /** Image courante (copies : les vues WASM seraient invalidées si la mémoire grandit). */
   frame(): Frame {
     const e = this.engine
@@ -103,6 +125,8 @@ export class SimController {
       angle: creatureView(e, 'angle').slice(),
       energy: creatureView(e, 'energy').slice(),
       species: creatureView(e, 'species').slice(),
+      id: creatureView(e, 'id').slice(),
+      selected: this.inspect(),
       grass: withGrass ? grassView(e).slice() : null,
     }
   }

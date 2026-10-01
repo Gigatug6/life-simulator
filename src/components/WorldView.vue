@@ -11,7 +11,7 @@ let renderer: Renderer | null = null
 
 onMounted(() => {
   renderer = new Renderer(canvas.value!)
-  renderer.onWorldClick = (x, y) => god.apply(x, y)
+  renderer.onWorldClick = (x, y) => god.apply(x, y, renderer!.view.zoom)
   if (world.terrain) renderer.setTerrain(world.terrain.w, world.terrain.h, world.terrain.biome)
 })
 onUnmounted(() => renderer?.dispose())
@@ -22,6 +22,7 @@ watch(() => world.frame, (f) => {
   if (f.grass) renderer.setGrass(f.grass)
   renderer.setDaylight(f.daylight)
   renderer.setCreatures(f)
+  renderer.setSelection(f.selected ? { x: f.selected.x, y: f.selected.y } : null)
 })
 </script>
 

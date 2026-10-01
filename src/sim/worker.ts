@@ -25,8 +25,9 @@ function loop() {
   const ticks = sim.advance(BUDGET_MS)
   const frame = sim.frame()
   const dt = Math.max(performance.now() - t0, 1)
-  const transfer: Transferable[] = [frame.x.buffer, frame.y.buffer, frame.angle.buffer, frame.energy.buffer, frame.species.buffer]
+  const transfer: Transferable[] = [frame.x.buffer, frame.y.buffer, frame.angle.buffer, frame.energy.buffer, frame.species.buffer, frame.id.buffer]
   if (frame.grass) transfer.push(frame.grass.buffer)
+  if (frame.selected) transfer.push(frame.selected.genome.buffer)
   post({ type: 'frame', frame, ticksPerSecond: (ticks / dt) * 1000 }, transfer)
   timer = setTimeout(loop, Math.max(FRAME_MS - dt, 1))
 }
@@ -55,6 +56,7 @@ self.onmessage = async (e: MessageEvent<ToWorker>) => {
       post({ type: 'snapshot', ...snap }, [snap.data.buffer])
     } else if (msg.type === 'setSpeed') sim.speed = msg.speed
     else if (msg.type === 'spawn') sim.spawn(msg.x, msg.y, msg.species, msg.count)
+    else if (msg.type === 'select') sim.selectedId = msg.id
     else if (msg.type === 'rain') sim.rain(msg.value)
     else if (msg.type === 'meteor') sim.meteor(msg.x, msg.y, msg.r)
     else if (msg.type === 'bless') sim.bless(msg.x, msg.y, msg.r)
