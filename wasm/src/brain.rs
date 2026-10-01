@@ -174,8 +174,9 @@ mod tests {
         g[W1 + IN + 4] = 4.0;
         g[W2 + HID_MAX] = -4.0; // sortie « tourner » : −h0
         g[W2 + HID_MAX + 1] = 4.0; // + h1
+        // 2 situations sur 6 parfaitement gérées + 4 neutres : (2×1 + 4×0,5) / 6 ≈ 0,667
         let c = competence(&g);
-        assert!(c > 0.7, "{}", c);
+        assert!((c - 2.0 / 3.0).abs() < 0.02, "{}", c);
         // aléatoire : proche de 0,5 en moyenne
         let mut rng = Rng::new(5);
         let mean: f32 = (0..400)
