@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { Biome, GENOME_LEN, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
+import { Biome, GENOME_LEN, LEARN_LEN, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
@@ -59,6 +59,8 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     const ids = Array.from(creatureView(e, 'id'))
     expect(new Set(ids).size).toBe(2)
     expect(e.genome_len()).toBe(GENOME_LEN)
+    expect(e.learn_len()).toBe(LEARN_LEN)
+    expect(creatureView(e, 'learned').length).toBe(2 * LEARN_LEN)
     expect(creatureView(e, 'genome').length).toBe(2 * GENOME_LEN)
     const g1 = creatureView(e, 'genome').slice(GENOME_LEN)
     e.creature_kill(0)

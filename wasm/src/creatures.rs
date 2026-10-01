@@ -1,5 +1,5 @@
 //! Stockage SoA des créatures (tableaux denses, suppression par échange avec le dernier).
-use crate::brain::GENOME_LEN;
+use crate::brain::{GENOME_LEN, LEARN_LEN};
 
 pub const MAX: usize = 20_000;
 
@@ -19,6 +19,8 @@ pub struct Creatures {
     pub species: [u8; MAX],
     /// Génomes à plat : GENOME_LEN f32 par créature.
     pub genome: [f32; MAX * GENOME_LEN],
+    /// Deltas appris pendant la vie (couche de sortie), LEARN_LEN f32 par créature.
+    pub learned: [f32; MAX * LEARN_LEN],
 }
 
 impl Creatures {
@@ -35,6 +37,7 @@ impl Creatures {
             generation: [0; MAX],
             species: [0; MAX],
             genome: [0.0; MAX * GENOME_LEN],
+            learned: [0.0; MAX * LEARN_LEN],
         }
     }
 
@@ -58,6 +61,7 @@ impl Creatures {
         self.generation[i] = generation;
         self.species[i] = species;
         self.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN].copy_from_slice(&genome[..GENOME_LEN]);
+        self.learned[i * LEARN_LEN..(i + 1) * LEARN_LEN].fill(0.0);
         self.next_id = self.next_id.wrapping_add(1);
         self.count += 1;
         Some(i)
@@ -79,6 +83,7 @@ impl Creatures {
             self.generation[i] = self.generation[last];
             self.species[i] = self.species[last];
             self.genome.copy_within(last * GENOME_LEN..(last + 1) * GENOME_LEN, i * GENOME_LEN);
+            self.learned.copy_within(last * LEARN_LEN..(last + 1) * LEARN_LEN, i * LEARN_LEN);
         }
         self.count = last;
     }
@@ -119,6 +124,13 @@ mod tests {
         assert_eq!(c.id[0], last_id);
         assert_eq!(c.x[0], 2.0);
         assert_eq!(c.genome[0], 0.5);
+        // l'apprentissage suit la créature échangée
+        let mut d = boxed();
+        d.spawn(0.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
+        d.spawn(1.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
+        d.learned[LEARN_LEN] = 0.75; // créature 1
+        d.kill(0);
+        assert_eq!(d.learned[0], 0.75);
         c.kill(10); // hors bornes : ignoré
         assert_eq!(c.count, 2);
     }

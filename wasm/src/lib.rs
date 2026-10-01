@@ -170,6 +170,16 @@ pub extern "C" fn genome_len() -> u32 {
 }
 
 #[no_mangle]
+pub extern "C" fn learn_len() -> u32 {
+    brain::LEARN_LEN as u32
+}
+
+#[no_mangle]
+pub extern "C" fn creature_learned_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.learned) as *const f32 }
+}
+
+#[no_mangle]
 pub extern "C" fn creature_genome_ptr() -> *const f32 {
     unsafe { core::ptr::addr_of!(CREATURES.genome) as *const f32 }
 }

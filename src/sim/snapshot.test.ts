@@ -28,6 +28,7 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     expect(creatureView(b, 'x')[1]).toBe(30)
     expect(b.creature_next_id()).toBe(a.creature_next_id())
     expect(creatureView(b, 'genome')).toEqual(creatureView(a, 'genome'))
+    expect(creatureView(b, 'learned')).toEqual(creatureView(a, 'learned'))
     expect(b.rng_lo()).toBe(a.rng_lo())
     expect(b.rng_hi()).toBe(a.rng_hi())
 

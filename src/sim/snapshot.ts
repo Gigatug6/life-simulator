@@ -5,7 +5,7 @@
 import { CREATURE_FIELDS, altitudeView, biomeView, grassView, type LifeExports } from './engine'
 
 export const SNAPSHOT_MAGIC = 0x4c494645 // « LIFE »
-export const SNAPSHOT_VERSION = 2
+export const SNAPSHOT_VERSION = 3
 const HEADER = 32
 
 export function takeSnapshot(e: LifeExports): Uint8Array {

@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { loadEngine } from './engine'
+import { creatureView, loadEngine } from './engine'
 import { describeBrain } from './brain'
 import { SimController, GRASS_EVERY } from './controller'
 
@@ -119,5 +119,15 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     expect(brain.w2[0]!.length).toBe(4)
     sim.meteor(64, 64, 200)
     expect(sim.frame().selected).toBeNull()
+  })
+
+  it("les créatures apprennent pendant leur vie (deltas appris non nuls)", async () => {
+    const sim = await make()
+    expect(creatureView(sim.engine, 'learned').every((v) => v === 0)).toBe(true)
+    sim.speed = 64
+    for (let i = 0; i < 6; i++) sim.advance(1000)
+    const learned = creatureView(sim.engine, 'learned')
+    expect(learned.some((v) => v !== 0)).toBe(true)
+    expect(learned.every((v) => Math.abs(v) <= 2)).toBe(true)
   })
 })

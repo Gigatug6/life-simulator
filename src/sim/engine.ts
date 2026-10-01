@@ -33,6 +33,8 @@ export interface LifeExports {
   creature_species_ptr(): number
   creature_genome_ptr(): number
   genome_len(): number
+  learn_len(): number
+  creature_learned_ptr(): number
   world_populate(species: number, count: number): number
   stats_count(species: number): number
   stats_mean_hidden(species: number): number
@@ -69,6 +71,8 @@ export function grassView(e: LifeExports): Float32Array {
 
 /** Longueur du génome en f32 (miroir de brain::GENOME_LEN ; vérifiée par un test). */
 export const GENOME_LEN = 185
+/** Deltas appris par créature (miroir de brain::LEARN_LEN). */
+export const LEARN_LEN = 48
 
 /** Champs SoA des créatures : nom, taille d'un élément, constructeur de vue, getter de pointeur. */
 export const CREATURE_FIELDS = [
@@ -81,6 +85,7 @@ export const CREATURE_FIELDS = [
   { name: 'generation', size: 2, ptr: 'creature_generation_ptr', ctor: Uint16Array },
   { name: 'species', size: 1, ptr: 'creature_species_ptr', ctor: Uint8Array },
   { name: 'genome', size: GENOME_LEN * 4, ptr: 'creature_genome_ptr', ctor: Float32Array },
+  { name: 'learned', size: LEARN_LEN * 4, ptr: 'creature_learned_ptr', ctor: Float32Array },
 ] as const
 
 export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
@@ -96,6 +101,7 @@ interface CreatureViews {
   generation: Uint16Array
   species: Uint8Array
   genome: Float32Array
+  learned: Float32Array
 }
 
 export function creatureView<K extends CreatureField>(e: LifeExports, name: K): CreatureViews[K] {

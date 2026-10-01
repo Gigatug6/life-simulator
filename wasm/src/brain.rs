@@ -47,8 +47,23 @@ pub fn random_genome(genome: &mut [f32], rng: &mut Rng) {
     genome[HID_GENE] = HID_MIN as f32 + 1.0;
 }
 
-/// Propagation avant. Les unités cachées au-delà de `hidden_count` sont ignorées.
+/// Taille du vecteur « appris » : un delta par poids caché -> sortie.
+pub const LEARN_LEN: usize = OUT * HID_MAX;
+const NO_LEARNING: [f32; LEARN_LEN] = [0.0; LEARN_LEN];
+const LEARN_RATE: f32 = 0.1;
+const LEARN_DECAY: f32 = 0.9995; // l'apprentissage s'estompe lentement
+const LEARN_CLAMP: f32 = 2.0;
+/// Part de ce qui a été appris que les enfants héritent (génétiquement assimilé).
+pub const INHERIT_FRACTION: f32 = 0.25;
+
+/// Propagation avant (génome seul).
 pub fn forward(genome: &[f32], input: &[f32; IN]) -> [f32; OUT] {
+    forward_learn(genome, &NO_LEARNING, input).0
+}
+
+/// Propagation avant avec les deltas appris sur la couche de sortie ; renvoie aussi les activations cachées.
+/// Les unités cachées au-delà de `hidden_count` sont ignorées.
+pub fn forward_learn(genome: &[f32], learned: &[f32], input: &[f32; IN]) -> ([f32; OUT], [f32; HID_MAX]) {
     let nh = hidden_count(genome);
     let mut hid = [0.0f32; HID_MAX];
     for h in 0..nh {
@@ -62,11 +77,29 @@ pub fn forward(genome: &[f32], input: &[f32; IN]) -> [f32; OUT] {
     for o in 0..OUT {
         let mut s = genome[B2 + o];
         for h in 0..nh {
-            s += genome[W2 + o * HID_MAX + h] * hid[h];
+            s += (genome[W2 + o * HID_MAX + h] + learned[o * HID_MAX + h]) * hid[h];
         }
         out[o] = tanh(s);
     }
-    out
+    (out, hid)
+}
+
+/// Règle à trois facteurs (hebbienne modulée) : renforce l'action effectuée (`out`) dans le contexte
+/// cérébral courant (`hid`) quand la récompense est positive, l'affaiblit quand elle est négative.
+pub fn learn(learned: &mut [f32], nh: usize, hid: &[f32; HID_MAX], out: &[f32; OUT], reward: f32) {
+    for o in 0..OUT {
+        for h in 0..nh {
+            let d = &mut learned[o * HID_MAX + h];
+            *d = (*d * LEARN_DECAY + LEARN_RATE * reward * out[o] * hid[h]).clamp(-LEARN_CLAMP, LEARN_CLAMP);
+        }
+    }
+}
+
+/// Assimile une fraction des deltas appris par le parent dans le génome de l'enfant.
+pub fn inherit(child_genome: &mut [f32], parent_learned: &[f32]) {
+    for k in 0..LEARN_LEN {
+        child_genome[W2 + k] += INHERIT_FRACTION * parent_learned[k];
+    }
 }
 
 /// Compétence comportementale d'un génome, dans [0, 1] (0,5 = indifférent / aléatoire).
@@ -74,6 +107,11 @@ pub fn forward(genome: &[f32], input: &[f32; IN]) -> [f32; OUT] {
 /// tourner vers la nourriture, avancer vers elle, ne pas foncer dans un obstacle, s'en détourner.
 /// Sorties : [0] avancer (>0 = rapide), [1] tourner (<0 = vers la gauche, >0 = vers la droite).
 pub fn competence(genome: &[f32]) -> f32 {
+    competence_with(genome, &NO_LEARNING)
+}
+
+/// Compétence du phénotype (génome + apprentissage de la vie).
+pub fn competence_with(genome: &[f32], learned: &[f32]) -> f32 {
     const BASE: [f32; IN] = [0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5];
     // (entrée activée, sortie observée, signe attendu)
     const PROBES: [(usize, usize, f32); 7] = [
@@ -89,7 +127,7 @@ pub fn competence(genome: &[f32]) -> f32 {
     for (input, output, sign) in PROBES {
         let mut x = BASE;
         x[input] = 1.0;
-        let out = forward(genome, &x)[output];
+        let out = forward_learn(genome, learned, &x).0[output];
         total += (1.0 + sign * out) * 0.5;
     }
     total / PROBES.len() as f32
@@ -189,6 +227,42 @@ mod tests {
             .sum::<f32>()
             / 400.0;
         assert!((mean - 0.5).abs() < 0.05, "{}", mean);
+    }
+
+    #[test]
+    fn learning_reinforces_rewarded_actions_and_stays_bounded() {
+        let mut g = vec![0.0; GENOME_LEN];
+        random_genome(&mut g, &mut Rng::new(11));
+        let nh = hidden_count(&g);
+        let input = [0.9, 0.5, 0.2, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.5];
+        let mut learned = [0.0f32; LEARN_LEN];
+        let (out0, _) = forward_learn(&g, &learned, &input);
+        // la sortie « manger » (2) est récompensée à chaque fois qu'elle est active
+        for _ in 0..200 {
+            let (out, hid) = forward_learn(&g, &learned, &input);
+            let reward = if out[2] > -0.9 { 1.0 } else { 0.0 };
+            learn(&mut learned, nh, &hid, &out, reward);
+        }
+        let (out1, _) = forward_learn(&g, &learned, &input);
+        assert!(out1[2] > out0[2] || out0[2] > 0.99, "{} -> {}", out0[2], out1[2]);
+        assert!(learned.iter().all(|d| d.abs() <= LEARN_CLAMP + 1e-6));
+        // récompense négative : on désapprend l'action
+        for _ in 0..400 {
+            let (out, hid) = forward_learn(&g, &learned, &input);
+            learn(&mut learned, nh, &hid, &out, -1.0);
+        }
+        let (out2, _) = forward_learn(&g, &learned, &input);
+        assert!(out2[2] < out1[2] || out1[2] < -0.99, "{} -> {}", out1[2], out2[2]);
+    }
+
+    #[test]
+    fn inheritance_assimilates_a_fraction_of_learning() {
+        let mut child = vec![0.0; GENOME_LEN];
+        let mut learned = [0.0f32; LEARN_LEN];
+        learned[5] = 1.0;
+        inherit(&mut child, &learned);
+        assert!((child[W2 + 5] - INHERIT_FRACTION).abs() < 1e-6);
+        assert_eq!(child[W2 + 6], 0.0);
     }
 
     #[test]

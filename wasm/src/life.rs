@@ -1,5 +1,5 @@
 //! Dynamique des créatures : perception -> cerveau -> action -> métabolisme -> mort/reproduction.
-use crate::brain::{self, GENOME_LEN, IN};
+use crate::brain::{self, GENOME_LEN, IN, LEARN_LEN};
 use crate::creatures::{Creatures, CARNIVORE, HERBIVORE};
 use crate::rng::Rng;
 use crate::spatial::SpatialHash;
@@ -148,6 +148,18 @@ pub fn mean_competence(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
+/// Compétence moyenne du phénotype (génome + apprentissage de la vie) d'une espèce.
+pub fn mean_phenotype_competence(c: &Creatures, species: u8) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            sum += brain::competence_with(&c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN], &c.learned[i * LEARN_LEN..(i + 1) * LEARN_LEN]);
+            n += 1;
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
 /// Avance d'un tick. `grid` est reconstruite ici.
 pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut Rng) {
     let n = c.count;
@@ -187,16 +199,20 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         input[9] = env.daylight;
 
         // --- décision ---
-        let out = brain::forward(&c.genome[g..g + GENOME_LEN], &input);
+        let l = i * LEARN_LEN;
+        let (out, hid) = brain::forward_learn(&c.genome[g..g + GENOME_LEN], &c.learned[l..l + LEARN_LEN], &input);
         let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED;
         let na = a + out[1] * 0.35;
         let (nx, ny) = (x + cos(na) * speed, y + sin(na) * speed);
         c.angle[i] = na;
         let mut moved = 0.0;
+        let mut reward = 0.0f32; // signal d'apprentissage de ce tick
         if !env.blocked(nx, ny) {
             c.x[i] = nx;
             c.y[i] = ny;
             moved = speed;
+        } else {
+            reward -= 0.2; // s'être cogné à l'eau / au bord
         }
 
         // --- métabolisme ---
@@ -207,10 +223,12 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         // --- manger (herbivores) ---
         if out[2] > 0.0 && c.species[i] == HERBIVORE {
             c.energy[i] -= EAT_COST;
+            reward -= EAT_COST;
             if let Some(cell) = env.cell(c.x[i], c.y[i]) {
                 let bite = if env.grass[cell] < EAT_BITE { env.grass[cell] } else { EAT_BITE };
                 env.grass[cell] -= bite;
                 c.energy[i] = (c.energy[i] + bite * EAT_GAIN).min(MAX_ENERGY);
+                reward += bite * EAT_GAIN / 3.0;
             }
         }
 
@@ -224,9 +242,12 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             });
             if let Some((j, _)) = best {
                 c.energy[i] = (c.energy[i] + c.energy[j] * KILL_GAIN).min(MAX_ENERGY);
+                reward += (c.energy[j] * KILL_GAIN / 10.0).min(2.0);
                 c.energy[j] = 0.0;
             }
         }
+
+        brain::learn(&mut c.learned[l..l + LEARN_LEN], nh as usize, &hid, &out, reward.clamp(-1.0, 2.0));
 
         c.age[i] += 1;
         if c.age[i] > MAX_AGE {
@@ -238,6 +259,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             c.energy[i] -= BIRTH_COST;
             let mut child = [0.0f32; GENOME_LEN];
             brain::mutate(&mut child, &c.genome[g..g + GENOME_LEN], rng, MUT_RATE, MUT_SIGMA);
+            brain::inherit(&mut child, &c.learned[l..l + LEARN_LEN]);
             let ang = rng.next_f32() * 2.0 * PI;
             let (cx, cy) = (c.x[i] + cos(ang), c.y[i] + sin(ang));
             let (cx, cy) = if env.blocked(cx, cy) { (c.x[i], c.y[i]) } else { (cx, cy) };
@@ -432,12 +454,13 @@ mod tests {
             }
             let maxgen = (0..n).map(|i| s.c.generation[i]).max().unwrap_or(0);
             println!(
-                "t={:6} herb={:5} carn={:4} hid={:.2} comp_h={:.3} comp_c={:.3} comp_vieux={:.3} gen_max={}",
+                "t={:6} herb={:5} carn={:4} hid={:.2} comp_h={:.3} phen_h={:.3} comp_c={:.3} comp_vieux={:.3} gen_max={}",
                 (chunk + 1) * step,
                 count_species(&s.c, HERBIVORE),
                 count_species(&s.c, CARNIVORE),
                 mean_hidden(&s.c, HERBIVORE),
                 mean_competence(&s.c, HERBIVORE),
+                mean_phenotype_competence(&s.c, HERBIVORE),
                 mean_competence(&s.c, CARNIVORE),
                 if oldn > 0 { old / oldn as f32 } else { 0.0 },
                 maxgen
