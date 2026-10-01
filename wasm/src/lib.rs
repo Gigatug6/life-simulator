@@ -49,6 +49,7 @@ static mut GRASS: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * worl
 static mut CREATURES: creatures::Creatures = creatures::Creatures::new();
 static mut RAIN: f32 = 0.0;
 static mut SEED: u32 = 0;
+static mut RNG: rng::Rng = rng::Rng(1);
 static mut BIOME: [u8; world::MAX_W * world::MAX_H] = [0; world::MAX_W * world::MAX_H];
 static mut WIDTH: u32 = 0;
 static mut HEIGHT: u32 = 0;
@@ -71,6 +72,7 @@ pub extern "C" fn world_init(seed: u32, w: u32, h: u32) -> u32 {
         }
         TICKS = 0;
         RAIN = 0.0;
+        RNG = rng::Rng::new(seed as u64 ^ 0xC0FFEE);
         (*core::ptr::addr_of_mut!(CREATURES)).clear();
         SEED = seed;
         WIDTH = w;
@@ -138,11 +140,39 @@ pub extern "C" fn world_restore(seed: u32, w: u32, h: u32, tick: u32, rain: f32)
 pub extern "C" fn creature_spawn(x: f32, y: f32, species: u32) -> i32 {
     unsafe {
         let c = &mut *core::ptr::addr_of_mut!(CREATURES);
-        match c.spawn(x, y, 0.0, 50.0, species as u8, 0) {
+        let rng = &mut *core::ptr::addr_of_mut!(RNG);
+        let mut genome = [0.0f32; brain::GENOME_LEN];
+        brain::random_genome(&mut genome, rng);
+        let angle = rng.next_f32() * 6.2831855;
+        match c.spawn(x, y, angle, 50.0, species as u8, 0, &genome) {
             Some(i) => i as i32,
             None => -1,
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn genome_len() -> u32 {
+    brain::GENOME_LEN as u32
+}
+
+#[no_mangle]
+pub extern "C" fn creature_genome_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.genome) as *const f32 }
+}
+
+/// État du générateur aléatoire (pour des snapshots reproductibles).
+#[no_mangle]
+pub extern "C" fn rng_lo() -> u32 {
+    unsafe { RNG.0 as u32 }
+}
+#[no_mangle]
+pub extern "C" fn rng_hi() -> u32 {
+    unsafe { (RNG.0 >> 32) as u32 }
+}
+#[no_mangle]
+pub extern "C" fn rng_restore(lo: u32, hi: u32) {
+    unsafe { RNG = rng::Rng(((hi as u64) << 32) | lo as u64) }
 }
 
 #[no_mangle]

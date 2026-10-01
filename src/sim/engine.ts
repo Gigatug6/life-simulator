@@ -29,6 +29,11 @@ export interface LifeExports {
   creature_id_ptr(): number
   creature_generation_ptr(): number
   creature_species_ptr(): number
+  creature_genome_ptr(): number
+  genome_len(): number
+  rng_lo(): number
+  rng_hi(): number
+  rng_restore(lo: number, hi: number): void
   memory: WebAssembly.Memory
 }
 
@@ -56,6 +61,9 @@ export function grassView(e: LifeExports): Float32Array {
   return new Float32Array(e.memory.buffer, e.world_grass_ptr(), e.world_width() * e.world_height())
 }
 
+/** Longueur du génome en f32 (miroir de brain::GENOME_LEN ; vérifiée par un test). */
+export const GENOME_LEN = 185
+
 /** Champs SoA des créatures : nom, taille d'un élément, constructeur de vue, getter de pointeur. */
 export const CREATURE_FIELDS = [
   { name: 'x', size: 4, ptr: 'creature_x_ptr', ctor: Float32Array },
@@ -66,6 +74,7 @@ export const CREATURE_FIELDS = [
   { name: 'id', size: 4, ptr: 'creature_id_ptr', ctor: Uint32Array },
   { name: 'generation', size: 2, ptr: 'creature_generation_ptr', ctor: Uint16Array },
   { name: 'species', size: 1, ptr: 'creature_species_ptr', ctor: Uint8Array },
+  { name: 'genome', size: GENOME_LEN * 4, ptr: 'creature_genome_ptr', ctor: Float32Array },
 ] as const
 
 export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
@@ -73,5 +82,5 @@ export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
 /** Vue sur un champ des créatures vivantes (valide jusqu'à la prochaine croissance mémoire). */
 export function creatureView(e: LifeExports, name: CreatureField) {
   const f = CREATURE_FIELDS.find((c) => c.name === name)!
-  return new f.ctor(e.memory.buffer, e[f.ptr](), e.creature_count())
+  return new f.ctor(e.memory.buffer, e[f.ptr](), (e.creature_count() * f.size) / f.ctor.BYTES_PER_ELEMENT)
 }

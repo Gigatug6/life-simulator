@@ -14,7 +14,7 @@ export function takeSnapshot(e: LifeExports): Uint8Array {
   const n = w * h
   const nc = e.creature_count()
   const creatureBytes = CREATURE_FIELDS.reduce((a, f) => a + f.size * nc, 0)
-  const out = new Uint8Array(HEADER + n * 9 + 8 + creatureBytes)
+  const out = new Uint8Array(HEADER + n * 9 + 16 + creatureBytes)
   const dv = new DataView(out.buffer)
   dv.setUint32(0, SNAPSHOT_MAGIC, true)
   dv.setUint32(4, SNAPSHOT_VERSION, true)
@@ -31,7 +31,9 @@ export function takeSnapshot(e: LifeExports): Uint8Array {
   let off = HEADER + n * 9
   dv.setUint32(off, nc, true)
   dv.setUint32(off + 4, e.creature_next_id(), true)
-  off += 8
+  dv.setUint32(off + 8, e.rng_lo(), true)
+  dv.setUint32(off + 12, e.rng_hi(), true)
+  off += 16
   for (const f of CREATURE_FIELDS) {
     out.set(new Uint8Array(e.memory.buffer, e[f.ptr](), nc * f.size), off)
     off += nc * f.size
@@ -47,10 +49,10 @@ export function restoreSnapshot(e: LifeExports, data: Uint8Array): boolean {
   const w = dv.getUint32(12, true)
   const h = dv.getUint32(16, true)
   const n = w * h
-  if (n === 0 || data.length < HEADER + n * 9 + 8) return false
+  if (n === 0 || data.length < HEADER + n * 9 + 16) return false
   const nc = dv.getUint32(HEADER + n * 9, true)
   const creatureBytes = CREATURE_FIELDS.reduce((a, f) => a + f.size * nc, 0)
-  if (data.length !== HEADER + n * 9 + 8 + creatureBytes) return false
+  if (data.length !== HEADER + n * 9 + 16 + creatureBytes) return false
   // world_init valide les dimensions et prépare la mémoire ; on écrase ensuite les couches.
   if (e.world_init(dv.getUint32(8, true), w, h) !== 0) return false
   new Uint8Array(altitudeView(e).buffer, altitudeView(e).byteOffset, n * 4).set(data.subarray(HEADER, HEADER + n * 4))
@@ -59,7 +61,8 @@ export function restoreSnapshot(e: LifeExports, data: Uint8Array): boolean {
   new Uint8Array(g.buffer, g.byteOffset, n * 4).set(data.subarray(HEADER + n * 5, HEADER + n * 9))
   if (e.world_restore(dv.getUint32(8, true), w, h, dv.getUint32(20, true), dv.getFloat32(24, true)) !== 0) return false
   if (e.creatures_restore(nc, dv.getUint32(HEADER + n * 9 + 4, true)) !== 0) return false
-  let off = HEADER + n * 9 + 8
+  e.rng_restore(dv.getUint32(HEADER + n * 9 + 8, true), dv.getUint32(HEADER + n * 9 + 12, true))
+  let off = HEADER + n * 9 + 16
   for (const f of CREATURE_FIELDS) {
     new Uint8Array(e.memory.buffer, e[f.ptr](), nc * f.size).set(data.subarray(off, off + nc * f.size))
     off += nc * f.size

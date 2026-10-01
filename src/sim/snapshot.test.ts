@@ -27,6 +27,9 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     expect(Array.from(creatureView(b, 'species'))).toEqual([0, 1])
     expect(creatureView(b, 'x')[1]).toBe(30)
     expect(b.creature_next_id()).toBe(a.creature_next_id())
+    expect(creatureView(b, 'genome')).toEqual(creatureView(a, 'genome'))
+    expect(b.rng_lo()).toBe(a.rng_lo())
+    expect(b.rng_hi()).toBe(a.rng_hi())
 
     for (let i = 0; i < 200; i++) {
       a.tick()

@@ -1,4 +1,6 @@
 //! Stockage SoA des créatures (tableaux denses, suppression par échange avec le dernier).
+use crate::brain::GENOME_LEN;
+
 pub const MAX: usize = 20_000;
 
 pub const HERBIVORE: u8 = 0;
@@ -15,6 +17,8 @@ pub struct Creatures {
     pub id: [u32; MAX],
     pub generation: [u16; MAX],
     pub species: [u8; MAX],
+    /// Génomes à plat : GENOME_LEN f32 par créature.
+    pub genome: [f32; MAX * GENOME_LEN],
 }
 
 impl Creatures {
@@ -30,6 +34,7 @@ impl Creatures {
             id: [0; MAX],
             generation: [0; MAX],
             species: [0; MAX],
+            genome: [0.0; MAX * GENOME_LEN],
         }
     }
 
@@ -39,7 +44,7 @@ impl Creatures {
     }
 
     /// Crée une créature ; renvoie son index, ou None si la population est pleine.
-    pub fn spawn(&mut self, x: f32, y: f32, angle: f32, energy: f32, species: u8, generation: u16) -> Option<usize> {
+    pub fn spawn(&mut self, x: f32, y: f32, angle: f32, energy: f32, species: u8, generation: u16, genome: &[f32]) -> Option<usize> {
         if self.count >= MAX {
             return None;
         }
@@ -52,6 +57,7 @@ impl Creatures {
         self.id[i] = self.next_id;
         self.generation[i] = generation;
         self.species[i] = species;
+        self.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN].copy_from_slice(&genome[..GENOME_LEN]);
         self.next_id = self.next_id.wrapping_add(1);
         self.count += 1;
         Some(i)
@@ -72,6 +78,7 @@ impl Creatures {
             self.id[i] = self.id[last];
             self.generation[i] = self.generation[last];
             self.species[i] = self.species[last];
+            self.genome.copy_within(last * GENOME_LEN..(last + 1) * GENOME_LEN, i * GENOME_LEN);
         }
         self.count = last;
     }
@@ -81,9 +88,11 @@ impl Creatures {
 mod tests {
     use super::*;
 
+    const G: [f32; GENOME_LEN] = [0.5; GENOME_LEN];
+
     fn boxed() -> Box<Creatures> {
-        // évite de passer ~500 Ko par la pile
-        let mut b = Box::new(Creatures::new());
+        // ~15 Mo : alloué directement sur le tas, jamais sur la pile
+        let mut b = unsafe { Box::<Creatures>::new_zeroed().assume_init() };
         b.clear();
         b
     }
@@ -91,8 +100,8 @@ mod tests {
     #[test]
     fn spawn_and_unique_ids() {
         let mut c = boxed();
-        let a = c.spawn(1.0, 2.0, 0.0, 10.0, HERBIVORE, 0).unwrap();
-        let b = c.spawn(3.0, 4.0, 0.0, 10.0, CARNIVORE, 0).unwrap();
+        let a = c.spawn(1.0, 2.0, 0.0, 10.0, HERBIVORE, 0, &G).unwrap();
+        let b = c.spawn(3.0, 4.0, 0.0, 10.0, CARNIVORE, 0, &G).unwrap();
         assert_eq!((a, b, c.count), (0, 1, 2));
         assert_ne!(c.id[a], c.id[b]);
         assert_eq!(c.species[b], CARNIVORE);
@@ -102,13 +111,14 @@ mod tests {
     fn kill_swaps_last_keeping_id() {
         let mut c = boxed();
         for k in 0..3 {
-            c.spawn(k as f32, 0.0, 0.0, 1.0, HERBIVORE, 0);
+            c.spawn(k as f32, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
         }
         let last_id = c.id[2];
         c.kill(0);
         assert_eq!(c.count, 2);
         assert_eq!(c.id[0], last_id);
         assert_eq!(c.x[0], 2.0);
+        assert_eq!(c.genome[0], 0.5);
         c.kill(10); // hors bornes : ignoré
         assert_eq!(c.count, 2);
     }
@@ -117,8 +127,8 @@ mod tests {
     fn capacity_is_enforced() {
         let mut c = boxed();
         for _ in 0..MAX {
-            assert!(c.spawn(0.0, 0.0, 0.0, 1.0, HERBIVORE, 0).is_some());
+            assert!(c.spawn(0.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G).is_some());
         }
-        assert!(c.spawn(0.0, 0.0, 0.0, 1.0, HERBIVORE, 0).is_none());
+        assert!(c.spawn(0.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G).is_none());
     }
 }
