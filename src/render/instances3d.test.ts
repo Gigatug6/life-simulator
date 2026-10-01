@@ -28,7 +28,7 @@ describe('Ground', () => {
 })
 
 const target = (cap = 8): InstanceTarget => ({ matrices: new Float32Array(cap * 16), colors: new Float32Array(cap * 3) })
-const arrays = (rows: Array<{ x: number; y: number; angle: number; species?: number; size?: number; signal?: number; id?: number }>): CreatureArrays => ({
+const arrays = (rows: Array<{ x: number; y: number; angle: number; species?: number; size?: number; signal?: number; asleep?: boolean; id?: number }>): CreatureArrays => ({
   x: Float32Array.from(rows.map((r) => r.x)),
   y: Float32Array.from(rows.map((r) => r.y)),
   angle: Float32Array.from(rows.map((r) => r.angle)),
@@ -37,6 +37,7 @@ const arrays = (rows: Array<{ x: number; y: number; angle: number; species?: num
   size: Float32Array.from(rows.map((r) => r.size ?? 1)),
   hue: Float32Array.from(rows.map(() => 0.5)),
   signal: Float32Array.from(rows.map((r) => r.signal ?? 0)),
+  asleep: Uint8Array.from(rows.map((r) => (r.asleep ? 1 : 0))),
   id: Uint32Array.from(rows.map((r, i) => r.id ?? i + 1)),
 })
 
@@ -47,6 +48,18 @@ describe('writeInstances3d', () => {
     const counts = writeInstances3d(rows.length, arrays(rows), g, ppc, time, t)
     return { t, counts }
   }
+
+  it('curls a sleeping creature up: flatter body, no hop, darker', () => {
+    const { t } = write([{ x: 5, y: 7, angle: 0 }, { x: 8, y: 7, angle: 0, asleep: true }], 10, 0.3)
+    const m = t[0].matrices
+    const height = (o: number) => Math.hypot(m[o + 4]!, m[o + 5]!, m[o + 6]!)
+    expect(height(16)).toBeLessThan(height(0) * 0.7)
+    const s = creatureScale3d(10)
+    expect(m[16 + 13]).toBeCloseTo(0.2 * RELIEF + 0.45 * height(16)) // sits on the ground, no hop (s * SLEEP_SQUASH tall)
+    expect(height(16)).toBeCloseTo(s * 0.55)
+    const c = t[0].colors
+    expect(c[3]! + c[4]! + c[5]!).toBeLessThan(c[0]! + c[1]! + c[2]!)
+  })
 
   it('stands on the ground, with world y mapped to the scene z axis', () => {
     const { t } = write([{ x: 5, y: 7, angle: 0 }], 10, 0)

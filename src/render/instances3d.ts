@@ -8,7 +8,7 @@ import type { Frame } from '../sim/protocol'
 export const creatureScale3d = (pixelsPerCell: number) => Math.max(1, 5 / Math.max(pixelsPerCell, 0.01))
 
 /** The per-creature arrays of a frame that the 3D view needs. */
-export type CreatureArrays = Pick<Frame, 'x' | 'y' | 'angle' | 'energy' | 'species' | 'size' | 'hue' | 'signal' | 'id'>
+export type CreatureArrays = Pick<Frame, 'x' | 'y' | 'angle' | 'energy' | 'species' | 'size' | 'hue' | 'signal' | 'asleep' | 'id'>
 
 /** Output buffers of one species (one InstancedMesh each: herbivores = 0, carnivores = 1). */
 export interface InstanceTarget {
@@ -20,6 +20,7 @@ export interface InstanceTarget {
 const SLOPE_SPAN = 0.8
 /** Hop of the walk cycle: height as a fraction of the body scale, and its speed in rad/s. */
 const HOP = 0.1
+const SLEEP_SQUASH = 0.55
 const HOP_SPEED = 8
 
 /**
@@ -65,26 +66,28 @@ export function writeInstances3d(
     const zy = xz * yx - xx * yz
     const zz = xx * yy - xy * yx
 
-    const hop = Math.abs(Math.sin(time * HOP_SPEED + f.id[i]! * 1.7)) * HOP * s
+    const sleeping = f.asleep[i] === 1
+    const sy = sleeping ? s * SLEEP_SQUASH : s // a sleeper is curled up
+    const hop = sleeping ? 0 : Math.abs(Math.sin(time * HOP_SPEED + f.id[i]! * 1.7)) * HOP * s
     const m = k * 16
     const a = t.matrices
     a[m] = xx * s
     a[m + 1] = xy * s
     a[m + 2] = xz * s
     a[m + 3] = 0
-    a[m + 4] = yx * s
-    a[m + 5] = yy * s
-    a[m + 6] = yz * s
+    a[m + 4] = yx * sy
+    a[m + 5] = yy * sy
+    a[m + 6] = yz * sy
     a[m + 7] = 0
     a[m + 8] = zx * s
     a[m + 9] = zy * s
     a[m + 10] = zz * s
     a[m + 11] = 0
     a[m + 12] = x
-    a[m + 13] = Math.max(ground.at(x, y), 0) + 0.45 * s + hop
+    a[m + 13] = Math.max(ground.at(x, y), 0) + 0.45 * sy + hop
     a[m + 14] = y
     a[m + 15] = 1
-    writeCreatureColor(t.colors, k, f.species[i]!, f.hue[i]!, f.energy[i]!, f.size[i]!, f.signal[i]!)
+    writeCreatureColor(t.colors, k, f.species[i]!, f.hue[i]!, f.energy[i]!, f.size[i]!, f.signal[i]!, sleeping)
   }
   return counts
 }

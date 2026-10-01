@@ -9,7 +9,7 @@ export const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: 'observe', label: 'Observer', hint: 'Regarder sans intervenir' },
   { id: 'inspect', label: 'Inspecter', hint: 'Cliquer une créature pour voir son cerveau' },
   { id: 'herbivore', label: 'Herbivores', hint: 'Fait apparaître 10 herbivores' },
-  { id: 'carnivore', label: 'Carnivores', hint: 'Fait apparaître 4 carnivores' },
+  { id: 'carnivore', label: 'Carnivores', hint: 'Fait apparaître 8 carnivores' },
   { id: 'meteor', label: 'Météorite', hint: 'Détruit tout dans le rayon' },
   { id: 'bless', label: 'Bénédiction', hint: 'Énergie et herbe au maximum dans le rayon' },
 ]
@@ -34,7 +34,7 @@ export const useGodStore = defineStore('god', () => {
         break
       case 'carnivore':
         world.pushEffect({ kind: 'spawn', x, y, radius: 3, species: 1 })
-        world.spawn(x, y, 1, 4)
+        world.spawn(x, y, 1, 8)
         message.value = 'Carnivores créés'
         break
       case 'meteor': {

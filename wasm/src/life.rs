@@ -26,7 +26,21 @@ const MUT_RATE: f32 = 0.08;
 const MUT_SIGMA: f32 = 0.15;
 const LOOK: f32 = 3.0; // sensor distance
 const STRIKE_RANGE: f32 = 1.8;
-const KILL_GAIN: f32 = 0.6; // share of the prey's energy recovered
+const KILL_GAIN: f32 = 0.8; // share of the prey energy recovered // share of the prey's energy recovered
+const CARN_UPKEEP: f32 = 1.0; // a hunter burns this multiple of the base upkeep
+const CARN_BIRTH: f32 = 1.25; // hunters need this multiple of the birth threshold: slows predator booms
+const MEAT_BONUS: f32 = 10.0; // meat is dense food // meat is dense food: a flat amount per kill, growing with the prey's size squared
+// fatigue and sleep
+const FATIGUE_BASE: f32 = 0.0005; // tiredness gained per awake tick
+const FATIGUE_MOVE: f32 = 0.004; // extra tiredness per unit of distance walked
+const REST: f32 = 0.004; // tiredness lost per sleeping tick
+const SLEEP_FORCED: f32 = 0.85; // exhausted: falls asleep whenever it is safe and fed
+const SLEEP_NIGHT: f32 = 0.5; // moderately tired creatures also go to sleep at night
+const WAKE_FATIGUE: f32 = 0.05; // rested enough to wake up
+const NIGHT: f32 = 0.25; // daylight below this is night
+const HUNGER_WAKE: f32 = 0.12; // below this share of max energy a creature wakes up (and will not fall asleep)
+const SLEEP_METABOLISM: f32 = 0.5; // resting burns half the upkeep, with no movement/brain/light costs
+const TIRED_SLOWDOWN: f32 = 0.4; // an exhausted creature walks this much slower
 const BIG_PREY_RATIO: f32 = 1.3; // hunters cannot take down prey larger than this multiple of their own size
 const PI: f32 = 3.1415927;
 
@@ -326,6 +340,29 @@ pub fn step(c: &mut Creatures, grids: &mut Grids, env: &mut Env, rng: &mut Rng) 
         let (size, speed_gene, vision) = (c.traits[tr + traits::SIZE], c.traits[tr + traits::SPEED], c.traits[tr + traits::VISION]);
         let look = LOOK * vision;
         let max_energy = MAX_ENERGY * size; // a bigger body stores more
+        let is_carn = c.species[i] == CARNIVORE;
+        // carnivores close by (only herbivores have predators)
+        let danger_near = if is_carn { 0 } else { grids.pred.count_up_to(&grids.pred_x, &grids.pred_y, x, y, DANGER_RADIUS, 3) };
+
+        // --- sleep: only when safe and fed; a sleeper wakes up rested, hungry or when a predator comes near ---
+        let (tired, hungry) = (c.fatigue[i], c.energy[i] < HUNGER_WAKE * max_energy);
+        let sleeps = if c.asleep[i] != 0 {
+            tired > WAKE_FATIGUE && !hungry && danger_near == 0
+        } else {
+            !hungry && danger_near == 0 && (tired > SLEEP_FORCED || (tired > SLEEP_NIGHT && env.daylight < NIGHT))
+        };
+        c.asleep[i] = sleeps as u8;
+        if sleeps {
+            let base = if is_carn { BASE_COST * CARN_UPKEEP } else { BASE_COST };
+            c.fatigue[i] = (tired - REST).max(0.0);
+            c.signal[i] = 0.0;
+            c.energy[i] -= base * traits::upkeep(size) * SLEEP_METABOLISM;
+            c.age[i] += 1;
+            if c.age[i] > MAX_AGE {
+                c.energy[i] = 0.0;
+            }
+            continue;
+        }
 
         // --- perception ---
         let mut input = [0.0f32; IN];
@@ -360,10 +397,7 @@ pub fn step(c: &mut Creatures, grids: &mut Grids, env: &mut Env, rng: &mut Rng) 
         input[8] = (near as f32 / 10.0).min(1.0);
         input[9] = env.daylight;
         // input 10: danger, i.e. carnivores close by (only herbivores have predators)
-        if c.species[i] == HERBIVORE {
-            let k = grids.pred.count_up_to(&grids.pred_x, &grids.pred_y, x, y, DANGER_RADIUS, 3);
-            input[10] = k as f32 / 3.0;
-        }
+        input[10] = danger_near as f32 / 3.0;
         // input 11: mean light of the neighbours; inputs 12-13: memory (previous activation of hidden units 0, 1)
         input[11] = if near > 0 { light / near as f32 } else { 0.0 };
         let mi = i * MEM_LEN;
@@ -376,7 +410,7 @@ pub fn step(c: &mut Creatures, grids: &mut Grids, env: &mut Env, rng: &mut Rng) 
         c.memory[mi] = hid[0];
         c.memory[mi + 1] = hid[1];
         c.signal[i] = (out[4] + 1.0) * 0.5; // light signal in 0..1
-        let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED * speed_gene;
+        let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED * speed_gene * (1.0 - TIRED_SLOWDOWN * tired);
         let na = a + out[1] * 0.35;
         let (nx, ny) = (x + cos(na) * speed, y + sin(na) * speed);
         c.angle[i] = na;
@@ -390,9 +424,11 @@ pub fn step(c: &mut Creatures, grids: &mut Grids, env: &mut Env, rng: &mut Rng) 
             reward -= 0.2; // bumped into water / the edge
         }
 
+        c.fatigue[i] = (tired + FATIGUE_BASE + moved * FATIGUE_MOVE).min(1.0);
+
         // --- metabolism ---
         let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
-        let base = if c.species[i] == CARNIVORE { BASE_COST * 1.3 } else { BASE_COST };
+        let base = if c.species[i] == CARNIVORE { BASE_COST * CARN_UPKEEP } else { BASE_COST };
         // upkeep grows with body size, long sight costs extra, and moving costs more for bigger / faster bodies
         c.energy[i] -= base * traits::upkeep(size) + base * 0.1 * (vision - 1.0) + moved * moved * 0.12 * size + nh * BRAIN_COST + SIGNAL_COST * c.signal[i];
 
@@ -420,8 +456,10 @@ pub fn step(c: &mut Creatures, grids: &mut Grids, env: &mut Env, rng: &mut Rng) 
                 }
             });
             if let Some((j, _)) = best {
-                c.energy[i] = (c.energy[i] + c.energy[j] * KILL_GAIN).min(max_energy);
-                reward += (c.energy[j] * KILL_GAIN / 10.0).min(2.0);
+                let prey_size = c.traits[j * TRAIT_LEN + traits::SIZE];
+                let meat = c.energy[j] * KILL_GAIN + MEAT_BONUS * prey_size * prey_size;
+                c.energy[i] = (c.energy[i] + meat).min(max_energy);
+                reward += (meat / 10.0).min(2.0);
                 c.energy[j] = 0.0;
             }
         }
@@ -434,7 +472,7 @@ pub fn step(c: &mut Creatures, grids: &mut Grids, env: &mut Env, rng: &mut Rng) 
         }
 
         // --- reproduction ---
-        if out[3] > 0.0 && c.age[i] >= MATURITY && c.energy[i] > BIRTH_THRESHOLD * size && c.count < crate::creatures::MAX {
+        if out[3] > 0.0 && c.age[i] >= MATURITY && c.energy[i] > BIRTH_THRESHOLD * size * if is_carn { CARN_BIRTH } else { 1.0 } && c.count < crate::creatures::MAX {
             c.energy[i] -= BIRTH_COST * size;
             let mut child = [0.0f32; GENOME_LEN];
             brain::mutate(&mut child, &c.genome[g..g + GENOME_LEN], rng, MUT_RATE, MUT_SIGMA);
@@ -803,6 +841,87 @@ mod tests {
         assert!(s.c.energy[0] > 40.0, "the predator gains energy: {}", s.c.energy[0]);
     }
 
+    fn step_at(s: &mut Sim, daylight: f32) {
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+    }
+
+    /// A genome that always wants to advance at full speed (output-0 bias).
+    fn runner() -> [f32; GENOME_LEN] {
+        let mut g = [0.0f32; GENOME_LEN];
+        g[brain::HID_GENE] = 4.0;
+        g[brain::B2] = 5.0;
+        g
+    }
+
+    #[test]
+    fn a_tired_creature_sleeps_at_night_then_wakes_up_rested() {
+        let mut s = plain_world();
+        let a = s.c.spawn(60.0, 60.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        let b = s.c.spawn(80.0, 80.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        s.c.fatigue[a] = 0.9;
+        s.c.fatigue[b] = 0.1; // not tired: keeps walking
+        let (ax, bx) = (s.c.x[a], s.c.x[b]);
+        step_at(&mut s, 0.1); // night
+        assert_eq!((s.c.asleep[a], s.c.asleep[b]), (1, 0));
+        assert_eq!(s.c.x[a], ax, "a sleeper does not move");
+        assert!(s.c.x[b] != bx, "an awake creature does");
+        assert!(s.c.fatigue[a] < 0.9, "sleeping rests");
+        // it sleeps until rested, whatever the light, then wakes up
+        for _ in 0..260 {
+            step_at(&mut s, 0.9);
+        }
+        let i = (0..s.c.count).find(|&k| s.c.id[k] == 1).unwrap();
+        assert_eq!(s.c.asleep[i], 0, "rested creatures wake up");
+        assert!(s.c.fatigue[i] < 0.2);
+    }
+
+    #[test]
+    fn walking_tires_and_a_sleeper_burns_less_energy() {
+        let mut s = plain_world();
+        let a = s.c.spawn(60.0, 60.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        for _ in 0..200 {
+            step_at(&mut s, 0.9);
+        }
+        assert!(s.c.fatigue[a] > 0.1, "walking builds up fatigue: {}", s.c.fatigue[a]);
+        // same body, awake vs asleep
+        let mut s = plain_world();
+        let awake = s.c.spawn(30.0, 30.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        let asleep = s.c.spawn(90.0, 90.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        s.c.fatigue[asleep] = 0.9;
+        step_at(&mut s, 0.1);
+        step_at(&mut s, 0.1);
+        let lost = |s: &Sim, i: usize| 80.0 - s.c.energy[i];
+        assert!(lost(&s, asleep) < lost(&s, awake) * 0.6, "sleep saves energy: {} vs {}", lost(&s, asleep), lost(&s, awake));
+    }
+
+    #[test]
+    fn hunger_and_predators_keep_a_tired_creature_awake() {
+        let mut s = plain_world();
+        let hungry = s.c.spawn(30.0, 30.0, 0.0, 5.0, HERBIVORE, 0, &runner()).unwrap();
+        let hunted = s.c.spawn(90.0, 90.0, 0.0, 80.0, HERBIVORE, 0, &runner()).unwrap();
+        s.c.spawn(94.0, 90.0, 0.0, 80.0, CARNIVORE, 0, &[0.0; GENOME_LEN]);
+        s.c.fatigue[hungry] = 0.95;
+        s.c.fatigue[hunted] = 0.95;
+        step_at(&mut s, 0.1);
+        assert_eq!(s.c.asleep[hungry], 0, "too hungry to sleep");
+        assert_eq!(s.c.asleep[hunted], 0, "too dangerous to sleep");
+    }
+
+    #[test]
+    fn meat_is_dense_food() {
+        let mut s = plain_world();
+        let mut gp = [0.0; GENOME_LEN];
+        gp[brain::HID_GENE] = 4.0;
+        gp[brain::B2 + 2] = 5.0;
+        s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &gp);
+        s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &[0.0; GENOME_LEN]);
+        step_at(&mut s, 0.9);
+        // one kill: most of the prey's energy plus a flat bonus, i.e. far more than any single bite of grass
+        assert!(s.c.energy[0] > 30.0 + 0.8 * 40.0, "one kill is a feast: {}", s.c.energy[0]);
+        assert!(s.c.energy[0] - 30.0 > 5.0 * EAT_BITE * EAT_GAIN);
+    }
+
     #[test]
     fn long_run_with_predators_herbivores_survive_and_get_smarter() {
         let mut s = sim(3, 300);
@@ -915,7 +1034,8 @@ mod tests {
         let mut s = sim(3, 300);
         let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
         add_carnivores(&mut s, nc);
-        for chunk in 0..12 {
+        let chunks: u32 = std::env::var("CHUNKS").ok().and_then(|v| v.parse().ok()).unwrap_or(12);
+        for chunk in 0..chunks {
             run_from(&mut s, chunk * 500, 500);
             println!(
                 "t={:5} herb={:5} carn={:4} hid_h={:.2} hid_c={:.2}",

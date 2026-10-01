@@ -215,11 +215,11 @@ test('at night the 3D world glows: fireflies between the trees, bioluminescent c
   // bright, warm-green dots on a dark background: the fireflies and the glows (a night without any is black)
   const lit = await page.getByTestId('world-canvas').evaluate((c: HTMLCanvasElement) => {
     const g = document.createElement('canvas')
-    g.width = 320
-    g.height = 180
+    g.width = 640
+    g.height = 360
     const ctx = g.getContext('2d')!
-    ctx.drawImage(c, 0, 0, 320, 180)
-    const d = ctx.getImageData(0, 0, 320, 180).data
+    ctx.drawImage(c, 0, 0, 640, 360)
+    const d = ctx.getImageData(0, 0, 640, 360).data
     let hits = 0
     for (let i = 0; i < d.length; i += 4) if (d[i + 1]! > 170 && d[i]! > 110 && d[i + 2]! < 200) hits++
     return hits

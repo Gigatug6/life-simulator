@@ -40,6 +40,8 @@ export interface LifeExports {
   mem_len(): number
   creature_memory_ptr(): number
   creature_signal_ptr(): number
+  creature_fatigue_ptr(): number
+  creature_asleep_ptr(): number
   stats_kind_share(species: number, kind: number): number
   stats_mean_signal(species: number): number
   stats_new_wiring(species: number): number
@@ -114,6 +116,8 @@ export const CREATURE_FIELDS = [
   { name: 'traits', size: TRAIT_LEN * 4, ptr: 'creature_traits_ptr', ctor: Float32Array },
   { name: 'memory', size: MEM_LEN * 4, ptr: 'creature_memory_ptr', ctor: Float32Array },
   { name: 'signal', size: 4, ptr: 'creature_signal_ptr', ctor: Float32Array },
+  { name: 'fatigue', size: 4, ptr: 'creature_fatigue_ptr', ctor: Float32Array },
+  { name: 'asleep', size: 1, ptr: 'creature_asleep_ptr', ctor: Uint8Array },
 ] as const
 
 export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
@@ -133,6 +137,8 @@ interface CreatureViews {
   traits: Float32Array
   memory: Float32Array
   signal: Float32Array
+  fatigue: Float32Array
+  asleep: Uint8Array
 }
 
 export function creatureView<K extends CreatureField>(e: LifeExports, name: K): CreatureViews[K] {

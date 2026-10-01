@@ -307,6 +307,18 @@ pub extern "C" fn creature_signal_ptr() -> *const f32 {
     unsafe { core::ptr::addr_of!(CREATURES.signal) as *const f32 }
 }
 
+/// Tiredness (0..1) of each creature.
+#[no_mangle]
+pub extern "C" fn creature_fatigue_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.fatigue) as *const f32 }
+}
+
+/// 1 for each sleeping creature, else 0.
+#[no_mangle]
+pub extern "C" fn creature_asleep_ptr() -> *const u8 {
+    unsafe { core::ptr::addr_of!(CREATURES.asleep) as *const u8 }
+}
+
 #[no_mangle]
 pub extern "C" fn creature_traits_ptr() -> *const f32 {
     unsafe { core::ptr::addr_of!(CREATURES.traits) as *const f32 }

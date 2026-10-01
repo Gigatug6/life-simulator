@@ -42,6 +42,9 @@ export interface Inspected {
   hidden: number
   /** Light signal 0..1 currently emitted. */
   signal: number
+  /** Tiredness 0..1 and whether the creature is asleep. */
+  fatigue: number
+  asleep: boolean
   genome: Float32Array
   /** Heritable physical traits: size, speed and vision multipliers (around 1) and the lineage hue (0..1). */
   traits: { size: number; speed: number; vision: number; hue: number }
@@ -75,6 +78,8 @@ export interface Frame {
   species: Uint8Array
   /** Light signal 0..1 emitted by each creature (bioluminescence). */
   signal: Float32Array
+  /** 1 for each sleeping creature (curled up, dim, no light). */
+  asleep: Uint8Array
   /** Body-size multiplier per creature (around 1). */
   size: Float32Array
   /** Lineage hue per creature (0..1). */

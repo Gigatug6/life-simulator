@@ -23,6 +23,8 @@ test("the inspector shows a creature and its brain", async ({ page }) => {
   await expect(page.getByTestId('brain')).toBeVisible()
   // new neurons: founders only have classic (tanh) neurons and a light signal that starts nearly dark
   await expect(page.getByTestId('inspector-kinds')).toContainText('Classique')
+  // fatigue and sleep: a young founder is awake and barely tired
+  await expect(page.getByTestId('inspector-state')).toHaveText(/^(Éveillé|Dort) · fatigue \d+ %$/)
   await expect(page.getByTestId('inspector-light')).toHaveText(/^\d+ %$/)
   await expect(page.locator('[data-testid="brain"] g[data-kind="tanh"]').first()).toBeVisible()
   await page.screenshot({ path: 'artifacts/screens/inspector.png' })

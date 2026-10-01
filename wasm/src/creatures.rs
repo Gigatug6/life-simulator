@@ -33,6 +33,10 @@ pub struct Creatures {
     pub memory: [f32; MAX * MEM_LEN],
     /// Light signal 0..1 emitted this tick (bioluminescence), sensed by neighbours.
     pub signal: [f32; MAX],
+    /// Tiredness 0..1: grows while awake (more when moving), shrinks while asleep.
+    pub fatigue: [f32; MAX],
+    /// 1 while the creature sleeps (it neither moves, eats, hunts nor reproduces).
+    pub asleep: [u8; MAX],
 }
 
 impl Creatures {
@@ -53,6 +57,8 @@ impl Creatures {
             traits: [0.0; MAX * TRAIT_LEN],
             memory: [0.0; MAX * MEM_LEN],
             signal: [0.0; MAX],
+            fatigue: [0.0; MAX],
+            asleep: [0; MAX],
         }
     }
 
@@ -81,6 +87,8 @@ impl Creatures {
         self.traits[i * TRAIT_LEN..(i + 1) * TRAIT_LEN].copy_from_slice(&traits::DEFAULT);
         self.memory[i * MEM_LEN..(i + 1) * MEM_LEN].fill(0.0);
         self.signal[i] = 0.0;
+        self.fatigue[i] = 0.0;
+        self.asleep[i] = 0;
         self.count += 1;
         Some(i)
     }
@@ -110,6 +118,8 @@ impl Creatures {
             self.traits.copy_within(last * TRAIT_LEN..(last + 1) * TRAIT_LEN, i * TRAIT_LEN);
             self.memory.copy_within(last * MEM_LEN..(last + 1) * MEM_LEN, i * MEM_LEN);
             self.signal[i] = self.signal[last];
+            self.fatigue[i] = self.fatigue[last];
+            self.asleep[i] = self.asleep[last];
         }
         self.count = last;
     }

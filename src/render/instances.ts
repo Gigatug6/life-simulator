@@ -16,9 +16,11 @@ export function writeCreatureColor(
   energy: number,
   size: number,
   signal: number,
+  asleep = false,
 ) {
   const [r, g, b] = lineageRgb(species, hue)
-  const k = 0.45 + 0.55 * Math.min(1, Math.max(0, energy / (MAX_ENERGY * size)))
+  // a sleeper is drawn darker
+  const k = (0.45 + 0.55 * Math.min(1, Math.max(0, energy / (MAX_ENERGY * size)))) * (asleep ? 0.55 : 1)
   const glow = signal * 0.75
   colors[i * 3] = r * k + (1 - r * k) * glow
   colors[i * 3 + 1] = g * k + (1 - g * k) * glow
@@ -38,6 +40,7 @@ export function writeInstances(
   size: Float32Array,
   hue: Float32Array,
   signal: Float32Array,
+  asleep: Uint8Array,
   zoom: number,
   matrices: Float32Array,
   colors: Float32Array,
@@ -67,6 +70,6 @@ export function writeInstances(
     matrices[m + 13] = -y[i]!
     matrices[m + 14] = 0.1
     matrices[m + 15] = 1
-    writeCreatureColor(colors, i, species[i]!, hue[i]!, energy[i]!, size[i]!, signal[i]!)
+    writeCreatureColor(colors, i, species[i]!, hue[i]!, energy[i]!, size[i]!, signal[i]!, asleep[i] === 1)
   }
 }

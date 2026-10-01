@@ -7,7 +7,7 @@ describe('writeInstances', () => {
     const m = new Float32Array(32)
     const c = new Float32Array(6)
     writeInstances(2, new Float32Array([10, 20]), new Float32Array([5, 6]), new Float32Array([0, Math.PI / 2]),
-      new Float32Array([120, 10]), new Uint8Array([0, 1]), new Float32Array([1, 1]), new Float32Array([0.5, 0.5]), new Float32Array([0, 0]), 10, m, c)
+      new Float32Array([120, 10]), new Uint8Array([0, 1]), new Float32Array([1, 1]), new Float32Array([0.5, 0.5]), new Float32Array([0, 0]), new Uint8Array([0, 0]), 10, m, c)
     expect([m[12], m[13]]).toEqual([10, -5])
     expect([m[16 + 12], m[16 + 13]]).toEqual([20, -6])
     const s = creatureSize(10)
@@ -22,17 +22,25 @@ describe('writeInstances', () => {
     const m = new Float32Array(32)
     const c = new Float32Array(6)
     writeInstances(2, new Float32Array([1, 2]), new Float32Array([1, 2]), new Float32Array([0, 0]),
-      new Float32Array([50, 50]), new Uint8Array([0, 0]), new Float32Array([1, 1.5]), new Float32Array([0.1, 0.9]), new Float32Array([0, 0]), 10, m, c)
+      new Float32Array([50, 50]), new Uint8Array([0, 0]), new Float32Array([1, 1.5]), new Float32Array([0.1, 0.9]), new Float32Array([0, 0]), new Uint8Array([0, 0]), 10, m, c)
     expect(m[16]!).toBeCloseTo(m[0]! * 1.5) // the bigger creature is drawn bigger
     // different lineage hues give clearly different colours within the same species
     expect(Math.abs(c[0]! - c[3]!) + Math.abs(c[1]! - c[4]!) + Math.abs(c[2]! - c[5]!)).toBeGreaterThan(0.2)
+  })
+
+  it('draws a sleeping creature darker', () => {
+    const m = new Float32Array(32)
+    const c = new Float32Array(6)
+    writeInstances(2, new Float32Array([1, 2]), new Float32Array([1, 2]), new Float32Array([0, 0]),
+      new Float32Array([50, 50]), new Uint8Array([0, 0]), new Float32Array([1, 1]), new Float32Array([0.5, 0.5]), new Float32Array([0, 0]), new Uint8Array([0, 1]), 10, m, c)
+    expect(c[3]! + c[4]! + c[5]!).toBeLessThan((c[0]! + c[1]! + c[2]!) * 0.7)
   })
 
   it('makes glowing creatures brighter and slightly bigger', () => {
     const m = new Float32Array(32)
     const c = new Float32Array(6)
     writeInstances(2, new Float32Array([1, 2]), new Float32Array([1, 2]), new Float32Array([0, 0]),
-      new Float32Array([50, 50]), new Uint8Array([0, 0]), new Float32Array([1, 1]), new Float32Array([0.5, 0.5]), new Float32Array([0, 1]), 10, m, c)
+      new Float32Array([50, 50]), new Uint8Array([0, 0]), new Float32Array([1, 1]), new Float32Array([0.5, 0.5]), new Float32Array([0, 1]), new Uint8Array([0, 0]), 10, m, c)
     expect(m[16]!).toBeGreaterThan(m[0]!) // glowing creature: bigger halo
     const sum = (o: number) => c[o]! + c[o + 1]! + c[o + 2]!
     expect(sum(3)).toBeGreaterThan(sum(0)) // and brighter (washed out towards white)

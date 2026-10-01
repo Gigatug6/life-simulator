@@ -27,6 +27,7 @@ const kinds = computed(() => {
     <p v-if="!alive" class="dead" data-testid="inspector-dead">Cette créature est morte.</p>
     <dl>
       <dt>Énergie</dt><dd data-testid="inspector-energy">{{ info.energy.toFixed(1) }}</dd>
+      <dt>État</dt><dd data-testid="inspector-state">{{ info.asleep ? 'Dort' : 'Éveillé' }} · fatigue {{ Math.round(info.fatigue * 100) }} %</dd>
       <dt>Âge</dt><dd>{{ info.age }} ticks</dd>
       <dt>Génération</dt><dd>{{ info.generation }}</dd>
       <dt>Neurones cachés</dt><dd data-testid="inspector-hidden">{{ info.hidden }}</dd>

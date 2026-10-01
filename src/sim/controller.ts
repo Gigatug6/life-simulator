@@ -118,6 +118,8 @@ export class SimController {
       species: creatureView(e, 'species')[i]!,
       hidden: hiddenCount(genome),
       signal: creatureView(e, 'signal')[i]!,
+      fatigue: creatureView(e, 'fatigue')[i]!,
+      asleep: creatureView(e, 'asleep')[i] === 1,
       genome,
       traits: {
         size: creatureView(e, 'traits')[i * TRAIT_LEN + Trait.Size]!,
@@ -154,6 +156,7 @@ export class SimController {
       energy: creatureView(e, 'energy').slice(),
       species: creatureView(e, 'species').slice(),
       signal: creatureView(e, 'signal').slice(),
+      asleep: creatureView(e, 'asleep').slice(),
       size: this.traitColumn(Trait.Size),
       hue: this.traitColumn(Trait.Hue),
       id: creatureView(e, 'id').slice(),

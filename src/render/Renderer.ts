@@ -127,7 +127,7 @@ export class Renderer implements WorldRenderer {
     const f = this.lastFrame
     if (!f) return
     const n = Math.min(f.count, MAX_CREATURES)
-    writeInstances(n, f.x, f.y, f.angle, f.energy, f.species, f.size, f.hue, f.signal, this.view.zoom,
+    writeInstances(n, f.x, f.y, f.angle, f.energy, f.species, f.size, f.hue, f.signal, f.asleep, this.view.zoom,
       this.creatures.instanceMatrix.array as Float32Array, this.creatures.instanceColor!.array as Float32Array)
     this.creatures.count = n
     this.creatures.instanceMatrix.needsUpdate = true
