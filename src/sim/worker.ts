@@ -5,7 +5,7 @@ import { SimController } from './controller'
 import type { FromWorker, ToWorker } from './protocol'
 
 const FRAME_MS = 33
-const BUDGET_MS = 22 // temps de calcul max par image : la simulation ralentit plutôt que de geler
+const BUDGET_MS = 22 // max compute time per frame: the simulation slows down rather than freezing
 
 let sim: SimController | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -18,7 +18,7 @@ function loop() {
   if (sim.catchingUp) {
     const r = sim.stepCatchup(20)
     post({ type: 'catchup', ...r })
-    timer = setTimeout(loop, 0) // laisse passer les messages (« passer », sauvegarde)
+    timer = setTimeout(loop, 0) // lets messages through (skip, save)
     return
   }
   const t0 = performance.now()

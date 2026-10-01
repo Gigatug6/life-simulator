@@ -1,4 +1,4 @@
-/** Décodage du génome d'un cerveau (miroir de wasm/src/brain.rs ; vérifié par test). */
+/** Decoding of a brain genome (mirror of wasm/src/brain.rs; checked by a test). */
 export const BRAIN_IN = 10
 export const BRAIN_HID_MAX = 12
 export const BRAIN_HID_MIN = 3
@@ -20,9 +20,9 @@ export function hiddenCount(genome: Float32Array): number {
 
 export interface BrainShape {
   hidden: number
-  /** w1[h][i] : poids de l'entrée i vers le neurone caché h. */
+  /** w1[h][i]: weight from input i to hidden neuron h. */
   w1: number[][]
-  /** w2[o][h] : poids du neurone caché h vers la sortie o. */
+  /** w2[o][h]: weight from hidden neuron h to output o. */
   w2: number[][]
 }
 

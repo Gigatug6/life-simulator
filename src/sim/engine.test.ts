@@ -4,8 +4,8 @@ import { Biome, ELITE_SLOTS, GENOME_LEN, LEARN_LEN, altitudeView, biomeView, cre
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
-describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
-  it('charge le module et répond', async () => {
+describe.runIf(existsSync(wasmPath))('WASM engine', () => {
+  it('loads the module and responds', async () => {
     const e = await loadEngine(readFileSync(wasmPath))
     expect(e.version()).toBe(1)
     expect(e.add(2, 3)).toBe(5)
@@ -13,7 +13,7 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(e.tick()).toBe(2)
   })
 
-  it('génère un monde déterministe avec eau et terre', async () => {
+  it('generates a deterministic world with water and land', async () => {
     const e = await loadEngine(readFileSync(wasmPath))
     expect(e.world_init(1, 0, 10)).toBe(1)
     expect(e.world_init(42, 128, 128)).toBe(0)
@@ -28,7 +28,7 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(biomeView(e)).not.toEqual(first)
   })
 
-  it("fait pousser l'herbe, seulement sur la terre, plus vite sous la pluie", async () => {
+  it("grows grass, only on land, faster under rain", async () => {
     const run = async (rain: number) => {
       const e = await loadEngine(readFileSync(wasmPath))
       e.world_init(42, 64, 64)
@@ -50,7 +50,7 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(dry.season).toBe(0)
   })
 
-  it('gère les créatures (spawn, kill par échange, id stables)', async () => {
+  it('manages creatures (spawn, swap-kill, stable ids)', async () => {
     const e = await loadEngine(readFileSync(wasmPath))
     e.world_init(1, 32, 32)
     expect(e.creature_spawn(1, 2, 0)).toBe(0)
@@ -64,7 +64,7 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(creatureView(e, 'genome').length).toBe(2 * GENOME_LEN)
     const g1 = creatureView(e, 'genome').slice(GENOME_LEN)
     e.creature_kill(0)
-    expect(creatureView(e, 'genome')).toEqual(g1) // le génome suit la créature échangée
+    expect(creatureView(e, 'genome')).toEqual(g1) // the genome follows the swapped creature
     expect(e.creature_count()).toBe(1)
     expect(creatureView(e, 'id')[0]).toBe(ids[1])
     expect(creatureView(e, 'x')[0]).toBe(3)
@@ -72,7 +72,7 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(e.creature_count()).toBe(0)
   })
 
-  it('expose des statistiques par espèce', async () => {
+  it('exposes per-species statistics', async () => {
     const e = await loadEngine(readFileSync(wasmPath))
     e.world_init(2, 64, 64)
     e.creature_spawn(10, 10, 0)
@@ -82,24 +82,24 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(e.stats_count(1)).toBe(1)
     expect(e.stats_mean_hidden(0)).toBe(4)
     expect(e.stats_mean_hidden(1)).toBe(4)
-    // cerveaux aléatoires : compétence proche de 0,5 (hasard) ; 0 si l'espèce est absente
+    // random brains: competence close to 0.5 (chance); 0 if the species is absent
     expect(Math.abs(e.stats_competence(0) - 0.5)).toBeLessThan(0.2)
     e.world_init(2, 64, 64)
     expect(e.stats_competence(1)).toBe(0)
   })
 
-  it("renaît de ses meilleurs ancêtres après une extinction", async () => {
+  it("is reborn from its best ancestors after an extinction", async () => {
     const e = await loadEngine(readFileSync(wasmPath))
     expect(e.elite_slots()).toBe(ELITE_SLOTS)
     e.world_init(31, 128, 128)
     e.world_populate(0, 200)
     for (let i = 0; i < 1500; i++) e.tick()
-    expect(e.elite_count()).toBeGreaterThan(0) // la mémoire des élites s'est remplie
-    e.world_meteor(64, 64, 500) // cataclysme
+    expect(e.elite_count()).toBeGreaterThan(0) // the elite memory has filled up
+    e.world_meteor(64, 64, 500) // cataclysm
     expect(e.creature_count()).toBe(0)
-    for (let i = 0; i < 500; i++) e.tick() // la vérification a lieu tous les 500 ticks
+    for (let i = 0; i < 500; i++) e.tick() // the check happens every 500 ticks
     expect(e.world_rescues()).toBe(1)
     expect(e.stats_count(0)).toBeGreaterThanOrEqual(12)
-    expect(e.stats_competence(0)).toBeGreaterThan(0.55) // descendants des élites, pas des cerveaux au hasard
+    expect(e.stats_competence(0)).toBeGreaterThan(0.55) // descendants of the elites, not random brains
   })
 })

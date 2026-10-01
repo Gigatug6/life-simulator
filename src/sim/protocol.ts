@@ -1,8 +1,8 @@
-/** Messages échangés entre le thread UI et le worker de simulation. */
-export const SPEEDS = [0, 1, 4, 16, 64] as const // ticks de simulation par image (0 = pause)
-/** Cadence de référence : ticks par seconde réelle à la vitesse ×1 (1 tick par image de 33 ms). */
+/** Messages exchanged between the UI thread and the simulation worker. */
+export const SPEEDS = [0, 1, 4, 16, 64] as const // simulation ticks per frame (0 = pause)
+/** Reference rate: ticks per real second at ×1 speed (1 tick per 33 ms frame). */
 export const TICK_RATE = 30
-/** Rattrapage : au plus 60 s de calcul et 300 000 ticks. */
+/** Catch-up: at most 60 s of computation and 300,000 ticks. */
 export const CATCHUP_MAX_MS = 60_000
 export const CATCHUP_MAX_TICKS = 300_000
 
@@ -16,9 +16,9 @@ export type ToWorker =
       h: number
       herbivores: number
       carnivores: number
-      /** Sauvegarde à reprendre ; ignorée si invalide (nouveau monde créé à la place). */
+      /** Save to resume; ignored if invalid (a new world is created instead). */
       snapshot?: Uint8Array
-      /** Temps réel écoulé depuis la sauvegarde (ms) : le monde est « rattrapé » en rafale. */
+      /** Real time elapsed since the save (ms): the world is "caught up" in a burst. */
       elapsedMs?: number
     }
   | { type: 'skipCatchup' }
@@ -26,11 +26,11 @@ export type ToWorker =
   | { type: 'setSpeed'; speed: Speed }
   | { type: 'spawn'; x: number; y: number; species: number; count: number }
   | { type: 'select'; id: number | null }
-  | { type: 'rain'; value: number } // -1 (sécheresse) .. 1 (pluie)
+  | { type: 'rain'; value: number } // -1 (drought) .. 1 (rain)
   | { type: 'meteor'; x: number; y: number; r: number }
   | { type: 'bless'; x: number; y: number; r: number }
 
-/** Détails d'une créature suivie (inspecteur). */
+/** Details of a followed creature (inspector). */
 export interface Inspected {
   id: number
   x: number
@@ -43,7 +43,7 @@ export interface Inspected {
   genome: Float32Array
 }
 
-/** Image envoyée à l'UI (buffers transférés, jamais partagés). */
+/** Frame sent to the UI (buffers are transferred, never shared). */
 export interface Frame {
   tick: number
   season: number
@@ -53,8 +53,8 @@ export interface Frame {
   carnivores: number
   hiddenHerbivores: number
   hiddenCarnivores: number
-  /** Indice d'intelligence 0-100 par espèce (null si l'espèce est absente). */
-  /** Nombre de renaissances (herbivores presque éteints, repeuplés depuis les meilleurs ancêtres). */
+  /** Intelligence index 0-100 per species (null if the species is absent). */
+  /** Number of rebirths (herbivores almost extinct, repopulated from the best ancestors). */
   rescues: number
   iqHerbivores: number | null
   iqCarnivores: number | null
@@ -64,9 +64,9 @@ export interface Frame {
   energy: Float32Array
   species: Uint8Array
   id: Uint32Array
-  /** Créature suivie, ou null si aucune sélection / morte. */
+  /** Followed creature, or null if nothing is selected / it is dead. */
   selected: Inspected | null
-  /** Herbe (w*h), présente seulement une image sur quelques-unes. */
+  /** Grass (w*h), only present on one frame out of a few. */
   grass: Float32Array | null
 }
 

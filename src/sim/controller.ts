@@ -1,12 +1,12 @@
-/** Pilote le moteur WASM (boucle, vitesse, images). Indépendant du Worker pour rester testable. */
+/** Drives the WASM engine (loop, speed, frames). Independent of the Worker so it stays testable. */
 import { GENOME_LEN, biomeView, creatureView, grassView, type LifeExports } from './engine'
 import { hiddenCount } from './brain'
 import { intelligenceIndex } from './intelligence'
 import { restoreSnapshot, takeSnapshot } from './snapshot'
 import { CATCHUP_MAX_MS, CATCHUP_MAX_TICKS, TICK_RATE, type Frame, type Speed } from './protocol'
 
-export const GRASS_EVERY = 10 // une image sur N embarque l'herbe
-export const IQ_EVERY = 15 // l'indice d'intelligence (coûteux) n'est recalculé que toutes les N images
+export const GRASS_EVERY = 10 // one frame in N carries the grass
+export const IQ_EVERY = 15 // the (costly) intelligence index is only recomputed every N frames
 
 export class SimController {
   speed: Speed = 1
@@ -19,7 +19,7 @@ export class SimController {
 
   init(seed: number, w: number, h: number, herbivores: number, carnivores: number) {
     const e = this.engine
-    if (e.world_init(seed, w, h) !== 0) throw new Error('dimensions du monde invalides')
+    if (e.world_init(seed, w, h) !== 0) throw new Error('invalid world dimensions')
     e.world_populate(0, herbivores)
     e.world_populate(1, carnivores)
     this.frames = 0
@@ -29,7 +29,7 @@ export class SimController {
     return this.catchup !== null
   }
 
-  /** Prépare le rattrapage de `elapsedMs` de temps réel (plafonné) ; renvoie le nombre de ticks visés. */
+  /** Prepares catching up `elapsedMs` of real time (capped); returns the target number of ticks. */
   beginCatchup(elapsedMs: number, now: () => number = () => performance.now()): number {
     const total = Math.min(CATCHUP_MAX_TICKS, Math.floor((Math.max(0, elapsedMs) / 1000) * TICK_RATE))
     this.catchup = total > 0 ? { total, done: 0, startedAt: now(), maxMs: CATCHUP_MAX_MS } : null
@@ -37,8 +37,8 @@ export class SimController {
   }
 
   /**
-   * Avance le rattrapage d'une tranche de `sliceMs`. Termine si tous les ticks sont faits,
-   * si le temps maximal est atteint, ou si le monde est vide.
+   * Advances the catch-up by a slice of `sliceMs`. Finishes when all ticks are done,
+   * when the maximum time is reached, or when the world is empty.
    */
   stepCatchup(sliceMs: number, now: () => number = () => performance.now()) {
     const c = this.catchup
@@ -62,7 +62,7 @@ export class SimController {
     this.catchup = null
   }
 
-  /** Reprend une sauvegarde ; false (monde inchangé ou vide) si elle est invalide. */
+  /** Resumes a save; false (world unchanged or empty) if it is invalid. */
   restore(data: Uint8Array): boolean {
     const ok = restoreSnapshot(this.engine, data)
     if (ok) this.frames = 0
@@ -73,12 +73,12 @@ export class SimController {
     return { data: takeSnapshot(this.engine), meta: { tick: this.engine.world_tick(), seed: this.engine.world_seed() >>> 0 } }
   }
 
-  /** Copie des biomes (envoyée une fois à l'UI). */
+  /** Copy of the biomes (sent once to the UI). */
   terrain() {
     return { w: this.engine.world_width(), h: this.engine.world_height(), biome: biomeView(this.engine).slice() }
   }
 
-  /** Exécute jusqu'à `speed` ticks sans dépasser `budgetMs` ; renvoie le nombre de ticks faits. */
+  /** Runs up to `speed` ticks without exceeding `budgetMs`; returns the number of ticks done. */
   advance(budgetMs: number, now: () => number = () => performance.now()): number {
     const start = now()
     let done = 0
@@ -90,7 +90,7 @@ export class SimController {
     return done
   }
 
-  /** Détails de la créature sélectionnée (null si aucune ou morte). */
+  /** Details of the selected creature (null if none or dead). */
   inspect(): Frame['selected'] {
     if (this.selectedId === null) return null
     const e = this.engine
@@ -110,7 +110,7 @@ export class SimController {
     }
   }
 
-  /** Image courante (copies : les vues WASM seraient invalidées si la mémoire grandit). */
+  /** Current frame (copies: WASM views would be invalidated if memory grew). */
   frame(): Frame {
     const e = this.engine
     if (this.frames % IQ_EVERY === 0) this.iq = this.computeIq()

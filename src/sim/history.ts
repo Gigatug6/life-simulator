@@ -1,11 +1,11 @@
-/** Historique échantillonné de l'évolution (population, intelligence), borné en taille. */
+/** Sampled history of the evolution (population, intelligence), bounded in size. */
 export interface Sample {
   tick: number
   herbivores: number
   carnivores: number
   hiddenHerbivores: number
   hiddenCarnivores: number
-  /** Indice d'intelligence 0-100 (null : espèce absente ou donnée antérieure à son introduction). */
+  /** Intelligence index 0-100 (null: species absent, or data older than this field). */
   iqHerbivores?: number | null
   iqCarnivores?: number | null
 }
@@ -14,28 +14,28 @@ export const MAX_POINTS = 600
 
 export class History {
   points: Sample[] = []
-  /** Écart minimal entre deux échantillons (ticks) ; double à chaque réduction. */
+  /** Minimum gap between two samples (ticks); doubles on each downsampling. */
   every: number
 
   constructor(every = 60, readonly max = MAX_POINTS) {
     this.every = every
   }
 
-  /** Ajoute l'échantillon si assez de ticks se sont écoulés depuis le dernier. */
+  /** Adds the sample if enough ticks have elapsed since the last one. */
   push(s: Sample): boolean {
     const last = this.points[this.points.length - 1]
-    if (last && s.tick < last.tick) return false // monde recommencé ou remonté : ignoré
+    if (last && s.tick < last.tick) return false // world restarted or rewound: ignored
     if (last && s.tick - last.tick < this.every) return false
     this.points.push(s)
     if (this.points.length > this.max) {
-      // on garde toute la chronologie en divisant la résolution par deux
+      // keep the whole timeline by halving the resolution
       this.points = this.points.filter((_, i) => i % 2 === 0)
       this.every *= 2
     }
     return true
   }
 
-  /** Oublie les points postérieurs à `tick` (sauvegarde plus ancienne que l'historique). */
+  /** Forgets the points after `tick` (save older than the history). */
   pruneAfter(tick: number) {
     this.points = this.points.filter((p) => p.tick <= tick)
   }
@@ -75,7 +75,7 @@ export function saveHistory(seed: number, h: History) {
   try {
     localStorage.setItem(KEY(seed), JSON.stringify(h))
   } catch {
-    // stockage plein ou indisponible : l'historique est un confort, pas une donnée critique
+    // storage full or unavailable: the history is a convenience, not critical data
   }
 }
 

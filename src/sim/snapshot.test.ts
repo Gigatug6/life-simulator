@@ -5,8 +5,8 @@ import { restoreSnapshot, snapshotInfo, takeSnapshot } from './snapshot'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
-describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
-  it("aller-retour : la simulation reprend à l'identique", async () => {
+describe.runIf(existsSync(wasmPath))('world snapshot', () => {
+  it("round trip: the simulation resumes identically", async () => {
     const a = await loadEngine(readFileSync(wasmPath))
     a.world_init(7, 96, 80)
     for (let i = 0; i < 300; i++) a.tick()
@@ -23,7 +23,7 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     expect(b.world_seed()).toBe(7)
     expect(b.world_rain()).toBeCloseTo(0.5)
     expect(takeSnapshot(b)).toEqual(snap)
-    // (le monde vide a été repeuplé par la renaissance pendant les 300 ticks : on compare à l'original)
+    // (the empty world was repopulated by the rebirth during the 300 ticks: compare with the original)
     expect(b.creature_count()).toBe(a.creature_count())
     expect(creatureView(b, 'species')).toEqual(creatureView(a, 'species'))
     expect(creatureView(b, 'x')).toEqual(creatureView(a, 'x'))
@@ -43,7 +43,7 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     expect(takeSnapshot(b)).toEqual(takeSnapshot(a))
   })
 
-  it('refuse les données invalides', async () => {
+  it('rejects invalid data', async () => {
     const e = await loadEngine(readFileSync(wasmPath))
     expect(restoreSnapshot(e, new Uint8Array(10))).toBe(false)
     const bad = new Uint8Array(64)
@@ -53,7 +53,7 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     expect(restoreSnapshot(e, snap.subarray(0, snap.length - 1))).toBe(false)
   })
 
-  it('la simulation de créatures reprend à l\'identique après restauration', async () => {
+  it('the creature simulation resumes identically after restoring', async () => {
     const a = await loadEngine(readFileSync(wasmPath))
     a.world_init(21, 128, 128)
     let placed = 0
@@ -72,7 +72,7 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     expect(a.creature_count()).toBeGreaterThan(0)
   })
 
-  it("lit l'en-tête d'un snapshot et rejette les fichiers invalides", async () => {
+  it("reads a snapshot header and rejects invalid files", async () => {
     const e = await loadEngine(readFileSync(wasmPath))
     e.world_init(9, 64, 48)
     e.creature_spawn(5, 5, 0)

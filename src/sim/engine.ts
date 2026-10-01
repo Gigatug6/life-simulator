@@ -1,4 +1,4 @@
-/** Charge le module WASM et expose son API typée. Aucune dépendance à Vue/Pinia. */
+/** Loads the WASM module and exposes its typed API. No dependency on Vue/Pinia. */
 export interface LifeExports {
   version(): number
   tick(): number
@@ -59,10 +59,10 @@ export async function loadEngine(source: BufferSource | Response | Promise<Respo
   return result.instance.exports as unknown as LifeExports
 }
 
-/** Biomes (miroir de wasm/src/world.rs). */
+/** Biomes (mirror of wasm/src/world.rs). */
 export const Biome = { DeepWater: 0, ShallowWater: 1, Beach: 2, Plain: 3, Forest: 4, Mountain: 5 } as const
 
-/** Vue sur les biomes du monde (valide jusqu'à la prochaine croissance de la mémoire WASM). */
+/** View over the world biomes (valid until the WASM memory next grows). */
 export function biomeView(e: LifeExports): Uint8Array {
   return new Uint8Array(e.memory.buffer, e.world_biome_ptr(), e.world_width() * e.world_height())
 }
@@ -75,14 +75,14 @@ export function grassView(e: LifeExports): Float32Array {
   return new Float32Array(e.memory.buffer, e.world_grass_ptr(), e.world_width() * e.world_height())
 }
 
-/** Longueur du génome en f32 (miroir de brain::GENOME_LEN ; vérifiée par un test). */
+/** Genome length in f32 (mirror of brain::GENOME_LEN; checked by a test). */
 export const GENOME_LEN = 185
-/** Deltas appris par créature (miroir de brain::LEARN_LEN). */
+/** Learned deltas per creature (mirror of brain::LEARN_LEN). */
 export const LEARN_LEN = 48
-/** Emplacements de la mémoire des élites (miroir de elite::ELITES). */
+/** Slots of the elite memory (mirror of elite::ELITES). */
 export const ELITE_SLOTS = 8
 
-/** Champs SoA des créatures : nom, taille d'un élément, constructeur de vue, getter de pointeur. */
+/** SoA fields of the creatures: name, element size, view constructor, pointer getter. */
 export const CREATURE_FIELDS = [
   { name: 'x', size: 4, ptr: 'creature_x_ptr', ctor: Float32Array },
   { name: 'y', size: 4, ptr: 'creature_y_ptr', ctor: Float32Array },
@@ -98,7 +98,7 @@ export const CREATURE_FIELDS = [
 
 export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
 
-/** Vue sur un champ des créatures vivantes (valide jusqu'à la prochaine croissance mémoire). */
+/** View over a field of the living creatures (valid until memory next grows). */
 interface CreatureViews {
   x: Float32Array
   y: Float32Array
