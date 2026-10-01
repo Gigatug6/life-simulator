@@ -34,13 +34,13 @@
 ### Phase 5 — Mode Dieu & UI
 - [x] 5.1 Barre d'outils « Dieu » : semer des herbivores/carnivores au clic, pluie, sécheresse, météorite, bénédiction (énergie) ; commandes worker + curseur en conséquence
 - [x] 5.2 Inspecteur : clic sur une créature → énergie, âge, génération, neurones cachés, mini-visualisation du cerveau
-- [ ] 5.3 Courbes : population par espèce + indice d'intelligence dans le temps (historique stocké dans le snapshot ou localStorage)
+- [x] 5.3 Courbes : population par espèce + indice d'intelligence dans le temps (historique stocké dans le snapshot ou localStorage)
 - [ ] 5.4 HUD propre (remplace l'overlay de debug), réglages, mobile/tactile
 ### Phase 6 — Intelligence avancée (structure évolutive, apprentissage, paliers)
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 5.3 : courbes — historique échantillonné (toutes les N ticks) : population herbivores/carnivores, neurones cachés moyens (indice d'intelligence), énergie moyenne ; stocké côté store (tableau borné ~600 points) et persisté en localStorage ; composant `Charts.vue` en SVG léger (lire le skill `dataviz` avant d'écrire le graphique) ; test unitaire de l'échantillonnage + e2e.
+Phase 5.4 : HUD propre — remplacer l'overlay de debug par une barre supérieure (nom, saison + jour/nuit, population, vitesse, menu ⚙ : sauvegarde/export/import/nouveau monde) ; réglages (volume futur, taille de carte ?) ; mobile/tactile : barres repliables, outils au pouce, e2e viewport mobile (Playwright `devices['Pixel 7']`) avec capture relue.
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -51,6 +51,7 @@ Phase 5.3 : courbes — historique échantillonné (toutes les N ticks) : popula
 (aucun)
 
 ## Journal
+- 5.3 fait : `sim/history.ts` (historique borné 600 pts, résolution divisée par 2 au dépassement, JSON validé, localStorage par graine, tronqué au tick de la sauvegarde), `LineChart.vue` (SVG, légende, points d'extrémité, réticule + infobulle, tableau accessible) et `Charts.vue` (population + intelligence moyenne). Skill dataviz appliqué : couleur = entité (herbivores bleu #3987e5, carnivores orange #d95926, slots 1-2) validée `validate_palette.js --mode dark` (ΔE CVD 9,4 / normal 26,5 : OK) ; jaune/rouge de la carte rejetés (ΔE normal 13,0 < 15). Capture relue : courbes OK ; corrigé l'axe du temps (« tick N » avant 1 jour) et titre trop long. Limite : intelligence plate à 4,0 pour l'instant (cf. phase 6). Vitest 29 + e2e 9 verts.
 - 5.2 fait : `sim/brain.ts` (décodage du génome, constantes miroir de brain.rs), `Frame.id` + `Frame.selected` (créature suivie par id stable, `SimController.inspect/selectedId`), commande worker `select`, store `pick/select/lastSelected`, outil « Inspecter » (tolérance 14 px), anneau dans le Renderer, `Inspector.vue` + `BrainView.vue` (SVG : entrées/cachés/sorties, liens verts/rouges). Capture `inspector.png` relue : anneau blanc sur la créature, fiche + schéma du cerveau (10 entrées, 4 cachés, 4 sorties) lisibles. Vitest 25 + e2e 8 verts.
 - 5.1 fait : Rust `life::meteor/bless` (+ `for_cells`), `world_meteor/world_bless`, pluie/sécheresse (`world_set_rain` ∈ [-1,1], `plants::step` : croissance nulle puis flétrissement), commandes worker `meteor/bless`, `Renderer.onWorldClick` (clic ≠ glisser), stores `god` (outil, rayon, message) + `GodTools.vue` (barre du bas). cargo 28, Vitest 24, e2e 7 verts (outils, météo, glisser sans effet). Note : un rayon de 40 couvre ~8 % de la carte 256².
 - 4.4 fait : `snapshotInfo` (lecture/validation d'en-tête), store `exportFile` (téléchargement `monde-<seed hex>-t<tick>.life`), `importFile` (valide, écrit dans le cache, redémarre sur ce monde, erreur si invalide), `newWorld` (confirmation, efface le cache). Bug réel corrigé : `world_seed()` revenait signé (u32 → i32 JS) → `>>> 0` dans `SimController.snapshot`. start() réinitialise status/frame/catchup. e2e export → nouveau monde → import → même tick (stable 3×). Vitest 23 + e2e 6 verts. Phase 4 terminée.

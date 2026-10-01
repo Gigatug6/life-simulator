@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { markRaw, ref, shallowRef } from 'vue'
+import { History, forgetHistory, loadHistory, saveHistory, type Sample } from '../sim/history'
 import { snapshotInfo } from '../sim/snapshot'
 import { createSaveStore, type SaveStore } from '../persist/store'
 import SimWorker from '../sim/worker?worker'
@@ -15,6 +16,9 @@ export const useWorldStore = defineStore('world', () => {
   const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array } | null>(null)
   const selectedId = ref<number | null>(null)
   const lastSelected = shallowRef<Inspected | null>(null)
+  const history = shallowRef<Sample[]>([])
+  let hist = new History()
+  let worldSeed = 0
   const restored = ref(false)
   const catchup = ref<{ done: number; total: number } | null>(null)
   const savedAt = ref<number | null>(null)
@@ -49,13 +53,23 @@ export const useWorldStore = defineStore('world', () => {
     persistent.value = saveStore.persistent
     let snapshot: Uint8Array | undefined
     let elapsedMs = 0
+    let savedTick = 0
+    worldSeed = seed
     try {
       const rec = await saveStore.load()
       snapshot = rec?.data
       elapsedMs = rec ? Math.max(0, Date.now() - rec.meta.savedAt) : 0
+      if (rec) {
+        worldSeed = rec.meta.seed
+        savedTick = rec.meta.tick
+      }
     } catch (err) {
       saveError.value = `Lecture de la sauvegarde impossible : ${err}`
     }
+    // historique des courbes : repris pour le même monde, tronqué à l'instant de la sauvegarde
+    hist = snapshot ? loadHistory(worldSeed) : new History()
+    hist.pruneAfter(savedTick)
+    history.value = hist.points.slice()
     worker = new SimWorker()
     worker.onmessage = (e: MessageEvent<FromWorker>) => {
       const m = e.data
@@ -73,6 +87,10 @@ export const useWorldStore = defineStore('world', () => {
       } else if (m.type === 'terrain') terrain.value = markRaw(m)
       else if (m.type === 'frame') {
         frame.value = markRaw(m.frame)
+        const fr = m.frame
+        if (hist.push({ tick: fr.tick, herbivores: fr.herbivores, carnivores: fr.carnivores, hiddenHerbivores: fr.hiddenHerbivores, hiddenCarnivores: fr.hiddenCarnivores })) {
+          history.value = hist.points.slice()
+        }
         if (m.frame.selected) lastSelected.value = markRaw(m.frame.selected)
         ticksPerSecond.value = m.ticksPerSecond
       } else if (m.type === 'catchup') {
@@ -83,6 +101,7 @@ export const useWorldStore = defineStore('world', () => {
           pendingExport = false
           download(m.data, `monde-${m.meta.seed.toString(16)}-t${m.meta.tick}.life`)
         }
+        saveHistory(m.meta.seed, hist)
         store
           ?.save(m.data, { savedAt: Date.now(), ...m.meta })
           .then(() => {
@@ -137,6 +156,7 @@ export const useWorldStore = defineStore('world', () => {
     } catch (err) {
       saveError.value = `Effacement impossible : ${err}`
     }
+    forgetHistory(worldSeed)
     savedAt.value = null
     frame.value = null
     await start()
@@ -183,7 +203,7 @@ export const useWorldStore = defineStore('world', () => {
   }
 
   return {
-    status, ready, speed, ticksPerSecond, frame, terrain, restored, catchup, savedAt, saveError, persistent,
+    status, ready, history, speed, ticksPerSecond, frame, terrain, restored, catchup, savedAt, saveError, persistent,
     selectedId, lastSelected, pick, select,
     start, stop, setSpeed, save, exportFile, importFile, newWorld,
     skipCatchup: () => send({ type: 'skipCatchup' }),

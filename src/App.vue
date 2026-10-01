@@ -5,6 +5,7 @@ import { SPEEDS } from './sim/protocol'
 import WorldView from './components/WorldView.vue'
 import GodTools from './components/GodTools.vue'
 import Inspector from './components/Inspector.vue'
+import Charts from './components/Charts.vue'
 
 const world = useWorldStore()
 onMounted(() => world.start())
@@ -25,6 +26,7 @@ const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
   <WorldView />
   <GodTools />
   <Inspector />
+  <div class="left">
   <main class="hud">
     <h1>Simulateur de vie</h1>
     <p data-testid="status">{{ world.status }}</p>
@@ -59,11 +61,14 @@ const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
       </button>
     </div>
   </main>
+  <Charts />
+  </div>
 </template>
 
 <style>
 body { margin: 0; background: #0b1410; color: #d7f0dc; font-family: system-ui, sans-serif; }
-main.hud { position: fixed; top: 0; left: 0; padding: 1rem; background: rgba(7, 13, 10, 0.72); border-bottom-right-radius: 8px; font-size: 14px; }
+div.left { position: fixed; top: 0; left: 0; max-height: 100vh; overflow: auto; }
+main.hud { padding: 1rem; background: rgba(7, 13, 10, 0.72); border-bottom-right-radius: 8px; font-size: 14px; }
 main.hud h1 { font-size: 1.1rem; margin: 0 0 .4rem; }
 main.hud p { margin: .15rem 0; }
 button { margin-right: .5rem; }
