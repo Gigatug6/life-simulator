@@ -28,13 +28,23 @@ export const useWorldStore = defineStore('world', () => {
   let saveStore: SaveStore | null = null
   let pendingExport = false
   let pendingImport = false
-  let autosave: ReturnType<typeof setInterval> | null = null
-  const AUTOSAVE_MS = 10_000
+  let autosave: ReturnType<typeof setTimeout> | null = null
+  let autosaveMs = 10_000
+  let writing = false
 
   const send = (m: ToWorker) => worker?.postMessage(m)
 
   const onHidden = () => {
     if (document.visibilityState === 'hidden') save()
+  }
+
+  /** Sauvegarde automatique : toutes les 10 s, plus espacée quand le monde est gros (≈ 2 s par Mo, max 60 s). */
+  function scheduleAutosave() {
+    if (autosave) clearTimeout(autosave)
+    autosave = setTimeout(() => {
+      save()
+      scheduleAutosave()
+    }, autosaveMs)
   }
 
   /** Demande un snapshot au worker ; l'écriture se fait ici (le thread principal survit à pagehide). */
@@ -81,7 +91,7 @@ export const useWorldStore = defineStore('world', () => {
           if (!m.restored) saveError.value = 'Fichier de sauvegarde invalide ou incompatible : un nouveau monde a été créé.'
         }
         status.value = m.restored ? `Monde repris depuis la sauvegarde (v${m.version})` : `Moteur WASM prêt (v${m.version})`
-        autosave = setInterval(save, AUTOSAVE_MS)
+        scheduleAutosave()
         document.addEventListener('visibilitychange', onHidden)
         window.addEventListener('pagehide', save)
       } else if (m.type === 'terrain') terrain.value = markRaw(m)
@@ -102,6 +112,9 @@ export const useWorldStore = defineStore('world', () => {
           download(m.data, `monde-${m.meta.seed.toString(16)}-t${m.meta.tick}.life`)
         }
         saveHistory(m.meta.seed, hist)
+        autosaveMs = Math.min(60_000, Math.max(10_000, (m.data.length / 1e6) * 2000))
+        if (writing) return // écriture précédente encore en cours : on n'empile pas
+        writing = true
         store
           ?.save(m.data, { savedAt: Date.now(), ...m.meta })
           .then(() => {
@@ -109,6 +122,7 @@ export const useWorldStore = defineStore('world', () => {
             saveError.value = null
           })
           .catch((err) => (saveError.value = `Sauvegarde impossible : ${err}`))
+          .finally(() => (writing = false))
       } else if (m.type === 'error') status.value = `Erreur : ${m.message}`
     }
     send({ type: 'init', seed, w, h, herbivores: 400, carnivores: 20, snapshot, elapsedMs })
@@ -163,7 +177,7 @@ export const useWorldStore = defineStore('world', () => {
   }
 
   function stop() {
-    if (autosave) clearInterval(autosave)
+    if (autosave) clearTimeout(autosave)
     autosave = null
     document.removeEventListener('visibilitychange', onHidden)
     window.removeEventListener('pagehide', save)

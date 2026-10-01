@@ -248,8 +248,8 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             }
             input[5 + k] = if env.blocked(sx, sy) { 1.0 } else { 0.0 };
         }
-        let mut near = 0u32;
-        grid.query(&c.x, &c.y, x, y, 6.0, |_, _| near += 1);
+        // voisins : on arrête de compter à 11 (soi-même + 10), l'entrée est de toute façon plafonnée à 1
+        let near = grid.count_up_to(&c.x, &c.y, x, y, 6.0, 11);
         input[8] = (near.saturating_sub(1) as f32 / 10.0).min(1.0);
         input[9] = env.daylight;
 
@@ -527,6 +527,22 @@ mod tests {
         assert!((start - 0.5).abs() < 0.1, "départ aléatoire : {}", start);
         assert!(end > 0.58, "l'intelligence doit avoir progressé : {} -> {}", start, end);
         assert!(s.c.count < crate::creatures::MAX / 4);
+    }
+
+    #[test]
+    #[ignore] // performance : cargo test perf_report -- --ignored --nocapture
+    fn perf_report() {
+        for n in [2_000usize, 5_000, 10_000, 20_000] {
+            let mut s = sim(9, n);
+            // la population évolue : on mesure sur 200 ticks juste après le peuplement
+            let t0 = std::time::Instant::now();
+            run_from(&mut s, 0, 200);
+            let dt = t0.elapsed().as_secs_f64();
+            println!(
+                "perf n0={:6} n_fin={:6} -> {:7.0} ticks/s ({:.2} ms/tick, {:.2} us/créature/tick) [natif, opt 3]",
+                n, s.c.count, 200.0 / dt, dt * 1000.0 / 200.0, dt * 1e6 / 200.0 / s.c.count as f64
+            );
+        }
     }
 
     #[test]
