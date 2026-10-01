@@ -23,7 +23,7 @@
 - [x] 2.5 Carnivores/prédation + équilibre de base (simulation headless : population ne s'éteint pas)
 ### Phase 3 — Worker + rendu three.js instancié
 - [x] 3.1 Protocole worker : boucle fixe (vitesse pause/×1/×4/×16/×64), snapshots transférables (positions, espèce, énergie) + commandes (init, spawn, pluie)
-- [ ] 3.2 Renderer three.js : caméra ortho, terrain en DataTexture (biomes + herbe + jour/nuit), zoom/pan
+- [x] 3.2 Renderer three.js : caméra ortho, terrain en DataTexture (biomes + herbe + jour/nuit), zoom/pan
 - [ ] 3.3 Créatures en InstancedMesh (couleur par espèce/énergie), capture e2e relue
 ### Phase 4 — Persistance IndexedDB + rattrapage hors-ligne
 ### Phase 5 — Mode Dieu & UI
@@ -31,7 +31,7 @@
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 3.2 : `src/render/` — Renderer three.js (caméra orthographique, terrain en DataTexture biomes+herbe teintée par jour/nuit, zoom molette/pinch, pan glisser) branché sur `world.terrain`/`world.frame` ; composant `WorldView.vue` ; capture e2e relue.
+Phase 3.3 : créatures en `InstancedMesh` (disque/triangle orienté par `angle`, couleur par espèce et luminosité selon l'énergie), mis à jour à chaque `frame` ; capture e2e relue. Puis revoir l'équilibrage du démarrage (boom 400→4400 herbivores en 60 ticks).
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -42,6 +42,7 @@ Phase 3.2 : `src/render/` — Renderer three.js (caméra orthographique, terrain
 (aucun)
 
 ## Journal
+- 3.2 fait : `render/view.ts` (ViewState pur : fit/pan/zoom au curseur/bornes), `render/terrainColor.ts` (biome + herbe → couleur), `render/Renderer.ts` (three ortho, DataTexture NearestFilter, molette, glisser, pinch, jour/nuit via color du matériau, dispose), `WorldView.vue`. Captures `artifacts/screens/world-fit.png`/`world-zoom.png` relues : île avec eau profonde/peu profonde, plages, plaines, forêts, montagnes grises, zones brunes broutées ; zoom OK. Observation : 400 herbivores → 4400 en 62 ticks (reproduction trop facile au démarrage), ~435-770 ticks/s avec 4000 créatures. Vitest 16 + e2e 2 verts.
 - 3.1 fait : `SimController` (testable sans Worker : init/peuplement `world_populate`, `advance` avec budget temps, `frame` en copies, spawn, pluie), worker mince (33 ms/image, budget 22 ms), protocole typé + `SPEEDS`, store Pinia `world` (tableaux en shallowRef/markRaw), App de debug avec boutons de vitesse. Vitest 11 + e2e smoke (vitesse ×16, pause fige les ticks) verts.
 - 2.5 fait : carnivores (capteurs de proies, frappe à 1,6, gain 50 % de l'énergie de la proie, métabolisme ×1,6), `stats_count`/`stats_mean_hidden`, test d'équilibre herbivores (ni extinction ni saturation sur 3000 ticks), test de prédation, rapport `balance_report` (ignoré : `cargo test balance_report -- --ignored --nocapture`, `CARN=n`). `[profile.test] opt-level=3`. Réglage : BRAIN_COST 0.004→0.0008 (sinon la sélection réduisait les cerveaux). Observations : herbivores seuls ≈ 200-500 individus stables ; avec carnivores la pression de prédation fait monter les unités cachées des herbivores (4→6) mais les carnivores s'éteignent après un pic → à rééquilibrer en phase 6. Phase 2 terminée.
 - 2.4b fait : life.rs (sin/cos approchés, perception 10 entrées, décision MLP, déplacement bloqué par l'eau profonde, métabolisme avec coût par unité cachée, manger, mort, reproduction mutée), branché dans `tick` avec spatial hash. cargo 23 + Vitest 7 (dont reprise identique après restauration avec créatures). À surveiller en 2.5 : le test de restauration (200 créatures, 300 ticks) prend ~3 s → la population semble gonfler fortement (probable saturation), équilibrage nécessaire.
