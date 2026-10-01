@@ -39,3 +39,31 @@ test('un monde sauvegardé il y a longtemps est rattrapé en rafale à la repris
   // le monde a avancé d'au moins ~500 ticks sans que l'on ait attendu
   await expect.poll(() => tickOf(page), { timeout: 20_000 }).toBeGreaterThan(500)
 })
+
+test('exporter, créer un nouveau monde puis réimporter le fichier retrouve le monde', async ({ page }) => {
+  page.on('dialog', (d) => d.accept())
+  await page.goto('/')
+  await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
+  await page.getByRole('button', { name: '×16' }).click()
+  await expect.poll(() => tickOf(page)).toBeGreaterThan(300)
+  await page.getByRole('button', { name: 'Pause' }).click()
+  await page.waitForTimeout(200)
+  const exportedTick = await tickOf(page)
+
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export').click()])
+  expect(download.suggestedFilename()).toMatch(/^monde-[0-9a-f]+-t\d+\.life$/)
+  const path = await download.path()
+
+  await page.getByTestId('new-world').click()
+  // le monde est remplacé (la boîte de confirmation est traitée de façon asynchrone)
+  await expect.poll(() => tickOf(page)).toBeLessThan(exportedTick)
+
+  await page.getByTestId('import-input').setInputFiles(path)
+  await expect(page.getByTestId('status')).toContainText('Monde repris')
+  await expect.poll(() => tickOf(page)).toBeGreaterThanOrEqual(exportedTick)
+  await expect(page.getByTestId('save-error')).toHaveCount(0)
+
+  // un fichier invalide est refusé sans casser le monde
+  await page.getByTestId('import-input').setInputFiles({ name: 'x.life', mimeType: 'application/octet-stream', buffer: Buffer.from('nimportequoi') })
+  await expect(page.getByTestId('save-error')).toContainText('pas une sauvegarde valide')
+})

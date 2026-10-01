@@ -7,6 +7,15 @@ import WorldView from './components/WorldView.vue'
 const world = useWorldStore()
 onMounted(() => world.start())
 onUnmounted(() => world.stop())
+function onImport(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (file) world.importFile(file)
+}
+function onNewWorld() {
+  if (window.confirm('Effacer ce monde et en créer un nouveau ?')) world.newWorld()
+}
 const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
 </script>
 
@@ -32,6 +41,14 @@ const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
       {{ world.savedAt ? 'Sauvegardé à ' + new Date(world.savedAt).toLocaleTimeString('fr-FR') : world.persistent ? 'Sauvegarde automatique toutes les 10 s' : 'Sauvegarde indisponible (mémoire seulement)' }}
       <button @click="world.save()">Sauvegarder</button>
     </p>
+    <p>
+      <button data-testid="export" @click="world.exportFile()">Exporter</button>
+      <label class="btn">
+        Importer
+        <input type="file" accept=".life" data-testid="import-input" hidden @change="onImport" />
+      </label>
+      <button data-testid="new-world" @click="onNewWorld">Nouveau monde</button>
+    </p>
     <div>
       <button v-for="s in SPEEDS" :key="s" :disabled="world.speed === s" @click="world.setSpeed(s)">
         {{ s === 0 ? 'Pause' : '×' + s }}
@@ -47,4 +64,5 @@ main.hud h1 { font-size: 1.1rem; margin: 0 0 .4rem; }
 main.hud p { margin: .15rem 0; }
 button { margin-right: .5rem; }
 .err { color: #ff8a80; }
+.btn { display: inline-block; padding: 1px 6px; margin-right: .5rem; background: #efefef; color: #000; border: 1px solid #767676; border-radius: 3px; cursor: pointer; font-size: 13px; }
 </style>

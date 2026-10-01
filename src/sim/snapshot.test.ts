@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { creatureView, grassView, loadEngine } from './engine'
-import { restoreSnapshot, takeSnapshot } from './snapshot'
+import { restoreSnapshot, snapshotInfo, takeSnapshot } from './snapshot'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
@@ -66,5 +66,19 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     }
     expect(takeSnapshot(b)).toEqual(takeSnapshot(a))
     expect(a.creature_count()).toBeGreaterThan(0)
+  })
+
+  it("lit l'en-tête d'un snapshot et rejette les fichiers invalides", async () => {
+    const e = await loadEngine(readFileSync(wasmPath))
+    e.world_init(9, 64, 48)
+    e.creature_spawn(5, 5, 0)
+    for (let i = 0; i < 12; i++) e.tick()
+    const snap = takeSnapshot(e)
+    expect(snapshotInfo(snap)).toEqual({ seed: 9, tick: 12, w: 64, h: 48, creatures: e.creature_count() })
+    expect(snapshotInfo(snap.subarray(0, snap.length - 3))).toBeNull()
+    expect(snapshotInfo(new Uint8Array(100))).toBeNull()
+    const bad = snap.slice()
+    bad[0] ^= 0xff
+    expect(snapshotInfo(bad)).toBeNull()
   })
 })

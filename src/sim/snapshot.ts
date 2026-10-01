@@ -69,3 +69,26 @@ export function restoreSnapshot(e: LifeExports, data: Uint8Array): boolean {
   }
   return true
 }
+
+export interface SnapshotInfo {
+  seed: number
+  tick: number
+  w: number
+  h: number
+  creatures: number
+}
+
+/** Lit l'en-tête d'un snapshot sans le restaurer ; null si le format est invalide. */
+export function snapshotInfo(data: Uint8Array): SnapshotInfo | null {
+  if (data.length < HEADER) return null
+  const dv = new DataView(data.buffer, data.byteOffset, data.byteLength)
+  if (dv.getUint32(0, true) !== SNAPSHOT_MAGIC || dv.getUint32(4, true) !== SNAPSHOT_VERSION) return null
+  const w = dv.getUint32(12, true)
+  const h = dv.getUint32(16, true)
+  const n = w * h
+  if (n === 0 || n > 512 * 512 || data.length < HEADER + n * 9 + 16) return null
+  const creatures = dv.getUint32(HEADER + n * 9, true)
+  const perCreature = CREATURE_FIELDS.reduce((a, f) => a + f.size, 0)
+  if (data.length !== HEADER + n * 9 + 16 + creatures * perCreature) return null
+  return { seed: dv.getUint32(8, true), tick: dv.getUint32(20, true), w, h, creatures }
+}

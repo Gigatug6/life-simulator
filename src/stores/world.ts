@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { markRaw, ref, shallowRef } from 'vue'
+import { snapshotInfo } from '../sim/snapshot'
 import { createSaveStore, type SaveStore } from '../persist/store'
 import SimWorker from '../sim/worker?worker'
 import type { Frame, FromWorker, Speed, ToWorker } from '../sim/protocol'
@@ -19,6 +20,8 @@ export const useWorldStore = defineStore('world', () => {
   const persistent = ref(false)
   let worker: Worker | null = null
   let saveStore: SaveStore | null = null
+  let pendingExport = false
+  let pendingImport = false
   let autosave: ReturnType<typeof setInterval> | null = null
   const AUTOSAVE_MS = 10_000
 
@@ -35,6 +38,9 @@ export const useWorldStore = defineStore('world', () => {
 
   async function start(seed = Math.floor(Math.random() * 2 ** 32), w = 256, h = 256) {
     stop()
+    status.value = 'Chargement du moteur…'
+    frame.value = null
+    catchup.value = null
     saveStore = createSaveStore()
     persistent.value = saveStore.persistent
     let snapshot: Uint8Array | undefined
@@ -52,6 +58,10 @@ export const useWorldStore = defineStore('world', () => {
       if (m.type === 'ready') {
         ready.value = true
         restored.value = m.restored
+        if (pendingImport) {
+          pendingImport = false
+          if (!m.restored) saveError.value = 'Fichier de sauvegarde invalide ou incompatible : un nouveau monde a été créé.'
+        }
         status.value = m.restored ? `Monde repris depuis la sauvegarde (v${m.version})` : `Moteur WASM prêt (v${m.version})`
         autosave = setInterval(save, AUTOSAVE_MS)
         document.addEventListener('visibilitychange', onHidden)
@@ -64,6 +74,10 @@ export const useWorldStore = defineStore('world', () => {
         catchup.value = m.finished ? null : { done: m.done, total: m.total }
       } else if (m.type === 'snapshot') {
         const store = saveStore
+        if (pendingExport) {
+          pendingExport = false
+          download(m.data, `monde-${m.meta.seed.toString(16)}-t${m.meta.tick}.life`)
+        }
         store
           ?.save(m.data, { savedAt: Date.now(), ...m.meta })
           .then(() => {
@@ -74,6 +88,53 @@ export const useWorldStore = defineStore('world', () => {
       } else if (m.type === 'error') status.value = `Erreur : ${m.message}`
     }
     send({ type: 'init', seed, w, h, herbivores: 400, carnivores: 20, snapshot, elapsedMs })
+  }
+
+  function download(data: Uint8Array, name: string) {
+    const url = URL.createObjectURL(new Blob([data as BlobPart], { type: 'application/octet-stream' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+
+  /** Télécharge le monde courant dans un fichier .life (en plus de la sauvegarde navigateur). */
+  function exportFile() {
+    if (!ready.value) return
+    pendingExport = true
+    save()
+  }
+
+  /** Remplace le monde par celui d'un fichier .life. */
+  async function importFile(file: File) {
+    const data = new Uint8Array(await file.arrayBuffer())
+    const info = snapshotInfo(data)
+    if (!info) {
+      saveError.value = 'Ce fichier n’est pas une sauvegarde valide.'
+      return
+    }
+    const store = saveStore ?? createSaveStore()
+    try {
+      await store.save(data, { savedAt: Date.now(), tick: info.tick, seed: info.seed })
+    } catch (err) {
+      saveError.value = `Import impossible : ${err}`
+      return
+    }
+    pendingImport = true
+    await start()
+  }
+
+  /** Efface la sauvegarde et repart d'un nouveau monde (graine aléatoire). */
+  async function newWorld() {
+    try {
+      await (saveStore ?? createSaveStore()).clear()
+    } catch (err) {
+      saveError.value = `Effacement impossible : ${err}`
+    }
+    savedAt.value = null
+    frame.value = null
+    await start()
   }
 
   function stop() {
@@ -94,7 +155,7 @@ export const useWorldStore = defineStore('world', () => {
 
   return {
     status, ready, speed, ticksPerSecond, frame, terrain, restored, catchup, savedAt, saveError, persistent,
-    start, stop, setSpeed, save,
+    start, stop, setSpeed, save, exportFile, importFile, newWorld,
     skipCatchup: () => send({ type: 'skipCatchup' }),
     spawn: (x: number, y: number, species: number, count: number) => send({ type: 'spawn', x, y, species, count }),
     rain: (value: number) => send({ type: 'rain', value }),

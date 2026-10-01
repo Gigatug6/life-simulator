@@ -65,7 +65,7 @@ export class SimController {
   }
 
   snapshot() {
-    return { data: takeSnapshot(this.engine), meta: { tick: this.engine.world_tick(), seed: this.engine.world_seed() } }
+    return { data: takeSnapshot(this.engine), meta: { tick: this.engine.world_tick(), seed: this.engine.world_seed() >>> 0 } }
   }
 
   /** Copie des biomes (envoyée une fois à l'UI). */
