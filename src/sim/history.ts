@@ -10,6 +10,8 @@ export interface Sample {
   iqCarnivores?: number | null
   /** Mean herbivore body plan (size / speed / vision multipliers); null when absent or for older data. */
   body?: { size: number; speed: number; vision: number } | null
+  /** Share of the herbivores' hidden neurons of each non-classic kind; null when absent or for older data. */
+  kinds?: { bump: number; step: number; wave: number } | null
 }
 
 export const MAX_POINTS = 600

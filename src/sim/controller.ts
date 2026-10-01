@@ -13,7 +13,12 @@ export class SimController {
   selectedId: number | null = null
   private frames = 0
   // slow statistics (recomputed every IQ_EVERY frames): intelligence index and mean herbivore body plan
-  private iq: { herb: number | null; carn: number | null; body: Frame['bodyHerbivores'] } = { herb: null, carn: null, body: null }
+  private iq: { herb: number | null; carn: number | null; body: Frame['bodyHerbivores']; kinds: Frame['kindsHerbivores'] } = {
+    herb: null,
+    carn: null,
+    body: null,
+    kinds: null,
+  }
   private catchup: { total: number; done: number; startedAt: number; maxMs: number } | null = null
 
   constructor(readonly engine: LifeExports) {}
@@ -136,6 +141,7 @@ export class SimController {
       iqHerbivores: this.iq.herb,
       iqCarnivores: this.iq.carn,
       bodyHerbivores: this.iq.body,
+      kindsHerbivores: this.iq.kinds,
       x: creatureView(e, 'x').slice(),
       y: creatureView(e, 'y').slice(),
       angle: creatureView(e, 'angle').slice(),
@@ -166,7 +172,9 @@ export class SimController {
       e.stats_count(0) > 0
         ? { size: e.stats_mean_trait(0, Trait.Size), speed: e.stats_mean_trait(0, Trait.Speed), vision: e.stats_mean_trait(0, Trait.Vision) }
         : null
-    return { herb: of(0), carn: of(1), body }
+    const kinds =
+      e.stats_count(0) > 0 ? { bump: e.stats_kind_share(0, 1), step: e.stats_kind_share(0, 2), wave: e.stats_kind_share(0, 3) } : null
+    return { herb: of(0), carn: of(1), body, kinds }
   }
 
   spawn(x: number, y: number, species: number, count: number) {

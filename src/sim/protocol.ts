@@ -62,6 +62,8 @@ export interface Frame {
   rescues: number
   /** Mean body plan of the herbivores (multipliers around 1), null if there are none. */
   bodyHerbivores: { size: number; speed: number; vision: number } | null
+  /** Share (0..1) of the herbivores' hidden neurons that are bump / step / wave neurons (the rest are tanh). */
+  kindsHerbivores: { bump: number; step: number; wave: number } | null
   iqHerbivores: number | null
   iqCarnivores: number | null
   x: Float32Array

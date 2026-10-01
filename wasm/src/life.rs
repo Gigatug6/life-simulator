@@ -550,6 +550,85 @@ mod tests {
         assert!(sighted < reference, "far sight must cost extra: {} vs {}", sighted, reference);
     }
 
+    /// A genome with one hidden unit (tanh) wired `input -> hidden 0 -> output`, nothing else.
+    fn wired(input: usize, output: usize, w_in: f32, w_out: f32) -> [f32; GENOME_LEN] {
+        let mut g = [0.0f32; GENOME_LEN];
+        g[brain::HID_GENE] = 4.0;
+        g[brain::W1 + input] = w_in; // hidden unit 0, this input
+        g[brain::W2 + output * brain::HID_MAX] = w_out; // this output, hidden unit 0
+        g
+    }
+
+    fn plain_world() -> Sim {
+        let mut s = sim(12, 0);
+        s.biome.iter_mut().for_each(|b| *b = world::PLAIN);
+        s.grass.iter_mut().for_each(|g| *g = 0.0);
+        s
+    }
+
+    #[test]
+    fn the_danger_sense_makes_herbivores_react_to_nearby_carnivores() {
+        // brain: danger -> hidden 0 -> advance. Two identical herbivores, one near a carnivore.
+        let mut s = plain_world();
+        let g = wired(10, 0, 5.0, 5.0);
+        let a = s.c.spawn(30.0, 30.0, 0.0, 40.0, HERBIVORE, 0, &g).unwrap();
+        let b = s.c.spawn(90.0, 90.0, 0.0, 40.0, HERBIVORE, 0, &g).unwrap();
+        s.c.spawn(34.0, 30.0, 0.0, 40.0, CARNIVORE, 0, &[0.0; GENOME_LEN]).unwrap(); // 4 cells from A
+        let (ax, bx) = (s.c.x[a], s.c.x[b]);
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        let moved = |i: usize, x0: f32| (s.c.x[i] - x0).abs();
+        assert!(moved(a, ax) > moved(b, bx) + 0.1, "the herbivore near a carnivore speeds up: {} vs {}", moved(a, ax), moved(b, bx));
+    }
+
+    #[test]
+    fn the_memory_cells_carry_the_previous_hidden_activation() {
+        // a constant hidden unit 0 (bias only): after one step its activation sits in the memory cell
+        let mut s = plain_world();
+        let mut g = [0.0f32; GENOME_LEN];
+        g[brain::HID_GENE] = 4.0;
+        g[brain::B1] = 1.0; // hidden 0 = tanh(1.0) ≈ 0.76
+        let a = s.c.spawn(50.0, 50.0, 0.0, 40.0, HERBIVORE, 0, &g).unwrap();
+        assert_eq!(s.c.memory[a * MEM_LEN], 0.0);
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        let m = s.c.memory[a * MEM_LEN];
+        assert!((m - brain::tanh(1.0)).abs() < 1e-5, "memory {}", m);
+        // ... and it comes back as an input. Hidden 1 is constant (bias only, so memory cell 2 = 0.76 from
+        // tick 2 on); hidden 0 reads ONLY memory cell 2 (input 13) and drives the advance output.
+        let mut reader = wired(13, 0, 5.0, 5.0);
+        reader[brain::B1 + 1] = 1.0;
+        let r = s.c.spawn(10.0, 90.0, 0.0, 40.0, HERBIVORE, 0, &reader).unwrap();
+        let first = s.c.x[r];
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        let slow = (s.c.x[r] - first).abs(); // memory cell 2 was still 0 on this tick: half speed
+        let first = s.c.x[r];
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        let fast = (s.c.x[r] - first).abs(); // now the memory feeds the advance output: full speed
+        assert!(fast > slow + 0.05, "memory must change the next tick: {} then {}", slow, fast);
+    }
+
+    #[test]
+    fn creatures_see_the_light_of_their_neighbours() {
+        // A always shines (output 4 saturated). B glows only in response to neighbouring light.
+        let mut s = plain_world();
+        let mut shiner = [0.0f32; GENOME_LEN];
+        shiner[brain::HID_GENE] = 4.0;
+        shiner[brain::B2 + 4] = 8.0;
+        let mut follower = wired(11, 4, 5.0, 5.0);
+        follower[brain::B2 + 4] = -2.0; // dark unless it sees light
+        s.c.spawn(60.0, 60.0, 0.0, 40.0, HERBIVORE, 0, &shiner).unwrap();
+        let near = s.c.spawn(62.0, 60.0, 0.0, 40.0, HERBIVORE, 0, &follower).unwrap();
+        let far = s.c.spawn(10.0, 10.0, 0.0, 40.0, HERBIVORE, 0, &follower).unwrap();
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        assert!(s.c.signal[0] > 0.95, "the shiner glows: {}", s.c.signal[0]);
+        assert!(s.c.signal[near] > s.c.signal[far] + 0.3, "a neighbour of the light lights up: {} vs {}", s.c.signal[near], s.c.signal[far]);
+        assert!(s.c.signal[far] < 0.2, "nothing to react to: {}", s.c.signal[far]);
+    }
+
     #[test]
     fn a_much_bigger_prey_cannot_be_taken_down() {
         let mut s = sim(4, 0);

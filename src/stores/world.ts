@@ -101,7 +101,7 @@ export const useWorldStore = defineStore('world', () => {
       else if (m.type === 'frame') {
         frame.value = markRaw(m.frame)
         const fr = m.frame
-        if (hist.push({ tick: fr.tick, herbivores: fr.herbivores, carnivores: fr.carnivores, hiddenHerbivores: fr.hiddenHerbivores, hiddenCarnivores: fr.hiddenCarnivores, iqHerbivores: fr.iqHerbivores, iqCarnivores: fr.iqCarnivores, body: fr.bodyHerbivores })) {
+        if (hist.push({ tick: fr.tick, herbivores: fr.herbivores, carnivores: fr.carnivores, hiddenHerbivores: fr.hiddenHerbivores, hiddenCarnivores: fr.hiddenCarnivores, iqHerbivores: fr.iqHerbivores, iqCarnivores: fr.iqCarnivores, body: fr.bodyHerbivores, kinds: fr.kindsHerbivores })) {
           history.value = hist.points.slice()
         }
         if (m.frame.selected) lastSelected.value = markRaw(m.frame.selected)
