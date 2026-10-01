@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { Biome, altitudeView, biomeView, loadEngine } from './engine'
+import { Biome, altitudeView, biomeView, grassView, loadEngine } from './engine'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
@@ -26,5 +26,27 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(biomeView(e)).toEqual(first)
     e.world_init(43, 128, 128)
     expect(biomeView(e)).not.toEqual(first)
+  })
+
+  it("fait pousser l'herbe, seulement sur la terre, plus vite sous la pluie", async () => {
+    const run = async (rain: number) => {
+      const e = await loadEngine(readFileSync(wasmPath))
+      e.world_init(42, 64, 64)
+      const sum = () => grassView(e).reduce((a, b) => a + b, 0)
+      const before = sum()
+      for (let i = 0; i < 1500; i++) {
+        if (rain && i % 100 === 0) e.world_set_rain(rain)
+        e.tick()
+      }
+      const biome = biomeView(e)
+      const grass = grassView(e)
+      for (let i = 0; i < grass.length; i++) if (biome[i] <= Biome.ShallowWater) expect(grass[i]).toBe(0)
+      return { before, after: sum(), season: e.world_season() }
+    }
+    const dry = await run(0)
+    const wet = await run(1)
+    expect(dry.after).toBeGreaterThan(dry.before)
+    expect(wet.after).toBeGreaterThan(dry.after)
+    expect(dry.season).toBe(0)
   })
 })

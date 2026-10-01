@@ -8,6 +8,10 @@ export interface LifeExports {
   world_height(): number
   world_altitude_ptr(): number
   world_biome_ptr(): number
+  world_grass_ptr(): number
+  world_season(): number
+  world_daylight(): number
+  world_set_rain(v: number): void
   memory: WebAssembly.Memory
 }
 
@@ -29,4 +33,8 @@ export function biomeView(e: LifeExports): Uint8Array {
 
 export function altitudeView(e: LifeExports): Float32Array {
   return new Float32Array(e.memory.buffer, e.world_altitude_ptr(), e.world_width() * e.world_height())
+}
+
+export function grassView(e: LifeExports): Float32Array {
+  return new Float32Array(e.memory.buffer, e.world_grass_ptr(), e.world_width() * e.world_height())
 }
