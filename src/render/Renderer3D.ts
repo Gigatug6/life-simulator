@@ -3,7 +3,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { Frame } from '../sim/protocol'
 import { Ground } from './relief'
 import { terrainColor } from './terrainColor'
-import { writeInstances3d } from './instances3d'
+import { writeInstances3d, writeShadows3d } from './instances3d'
+import { carnivoreGeometry, herbivoreGeometry } from './creatureModels'
 import { skyAt } from './sky'
 import { applySeason, seasonFactors, type SeasonFactors } from './seasons'
 import { SKY_FRAGMENT, SKY_VERTEX, WATER_FRAGMENT, WATER_VERTEX } from './shaders'
@@ -62,7 +63,8 @@ export class Renderer3D implements WorldRenderer {
   private w = 0
   private h = 0
 
-  private creatures: THREE.InstancedMesh
+  private bodies: [THREE.InstancedMesh, THREE.InstancedMesh] // herbivores, carnivores
+  private shadows: THREE.InstancedMesh // flat dark discs under the creatures
   private ring: THREE.Mesh
   private ringPos: { x: number; y: number } | null = null
   private lastFrame: Frame | null = null
@@ -94,15 +96,30 @@ export class Renderer3D implements WorldRenderer {
     this.sky.renderOrder = -10
     this.scene.add(this.sky)
 
-    // creatures: cones pointing along +x, one instance each
-    const body = new THREE.ConeGeometry(0.42, 1.6, 6).rotateZ(-Math.PI / 2)
-    this.creatures = new THREE.InstancedMesh(body, new THREE.MeshLambertMaterial(), MAX_CREATURES)
-    this.creatures.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-    this.creatures.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_CREATURES * 3), 3)
-    this.creatures.instanceColor.setUsage(THREE.DynamicDrawUsage)
-    this.creatures.frustumCulled = false
-    this.creatures.count = 0
-    this.scene.add(this.creatures)
+    // creatures: one InstancedMesh per species (low-poly bodies with vertex colours for eyes, ears, feet)
+    const makeBodies = (geometry: THREE.BufferGeometry) => {
+      const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }), MAX_CREATURES)
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_CREATURES * 3), 3)
+      mesh.instanceColor.setUsage(THREE.DynamicDrawUsage)
+      mesh.frustumCulled = false
+      mesh.count = 0
+      this.scene.add(mesh)
+      return mesh
+    }
+    this.bodies = [makeBodies(herbivoreGeometry()), makeBodies(carnivoreGeometry())]
+
+    // blob shadows (real shadow maps would not scale to thousands of instances)
+    this.shadows = new THREE.InstancedMesh(
+      new THREE.CircleGeometry(1, 14).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }),
+      MAX_CREATURES,
+    )
+    this.shadows.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    this.shadows.frustumCulled = false
+    this.shadows.count = 0
+    this.shadows.renderOrder = 2
+    this.scene.add(this.shadows)
 
     // selection ring lying on the ground
     this.ring = new THREE.Mesh(
@@ -320,6 +337,7 @@ export class Renderer3D implements WorldRenderer {
     this.hemi.groundColor.setRGB(...s.ambientGround)
     this.hemi.intensity = s.ambientIntensity
 
+    ;(this.shadows.material as THREE.MeshBasicMaterial).opacity = 0.1 + 0.3 * s.day // shadows fade at night
     this.skyUniforms.uSunDir.value.set(...s.sunDir)
     this.skyUniforms.uHorizon.value.setRGB(...s.horizon)
     this.skyUniforms.uZenith.value.setRGB(...s.zenith)
@@ -354,11 +372,19 @@ export class Renderer3D implements WorldRenderer {
     if (!f || !this.ground) return
     const n = Math.min(f.count, MAX_CREATURES)
     const ppc = this.pixelsPerCell
-    writeInstances3d(n, f.x, f.y, f.angle, f.energy, f.species, f.size, f.hue, f.signal, this.ground, ppc,
-      this.creatures.instanceMatrix.array as Float32Array, this.creatures.instanceColor!.array as Float32Array)
-    this.creatures.count = n
-    this.creatures.instanceMatrix.needsUpdate = true
-    this.creatures.instanceColor!.needsUpdate = true
+    const target = (m: THREE.InstancedMesh) => ({
+      matrices: m.instanceMatrix.array as Float32Array,
+      colors: m.instanceColor!.array as Float32Array,
+    })
+    const counts = writeInstances3d(n, f, this.ground, ppc, performance.now() / 1000, [target(this.bodies[0]), target(this.bodies[1])])
+    this.bodies.forEach((m, k) => {
+      m.count = counts[k]!
+      m.instanceMatrix.needsUpdate = true
+      m.instanceColor!.needsUpdate = true
+    })
+    writeShadows3d(n, f, this.ground, ppc, this.shadows.instanceMatrix.array as Float32Array)
+    this.shadows.count = n
+    this.shadows.instanceMatrix.needsUpdate = true
     this.uploadedScale = ppc
   }
 
@@ -442,10 +468,12 @@ export class Renderer3D implements WorldRenderer {
       this.scene.remove(this.outerSea)
       this.outerSea.geometry.dispose() // its material is the water's, already disposed above
     }
-    this.scene.remove(this.creatures)
-    this.creatures.geometry.dispose()
-    ;(this.creatures.material as THREE.Material).dispose()
-    this.creatures.dispose()
+    for (const m of [...this.bodies, this.shadows]) {
+      this.scene.remove(m)
+      m.geometry.dispose()
+      ;(m.material as THREE.Material).dispose()
+      m.dispose()
+    }
     this.renderer.dispose()
   }
 }

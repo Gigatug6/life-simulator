@@ -74,3 +74,35 @@ test('a click on the 3D terrain applies the god tool at that place', async ({ pa
   await expect.poll(count).toBeGreaterThanOrEqual(before) // the click raycasts onto the terrain (or the sea: no spawn on water)
   await expect(page.getByTestId('god-message')).toContainText('Herbivores créés')
 })
+
+test('creatures have bodies in 3D, can be approached and inspected with a click', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('population')).toContainText('herbivores')
+  await page.getByTestId('mode-toggle').click()
+  const tick = async () => Number(/Tick : (\d+)/.exec((await page.getByTestId('ticks').textContent()) ?? '')?.[1])
+  // wait for daylight (tick 250+) so the close-up is readable, then freeze
+  await page.getByRole('button', { name: '×4' }).click()
+  for (let i = 0; i < 400 && (await tick()) < 270; i++) await page.waitForTimeout(40)
+  await page.getByRole('button', { name: 'Pause' }).click()
+
+  // sow a herd right under the camera target (the screen centre looks at the middle of the island)
+  const box = (await page.getByTestId('world-canvas').boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  await page.getByTestId('tool-herbivore').click()
+  await page.mouse.click(cx, cy)
+  await page.mouse.click(cx, cy)
+  await page.mouse.click(cx, cy)
+  await page.mouse.move(cx, cy)
+  for (let i = 0; i < 6; i++) await page.mouse.wheel(0, -700) // dolly in towards the target
+  await page.waitForTimeout(900)
+  await page.screenshot({ path: 'artifacts/screens/world3d-closeup.png' })
+
+  // inspect: the click is raycast onto the terrain and the nearest creature is selected
+  await page.getByTestId('tool-inspect').click()
+  await page.mouse.click(cx, cy)
+  await expect(page.getByTestId('inspector')).toBeVisible()
+  await expect(page.getByTestId('inspector-size')).toHaveText(/^×\d\.\d\d$/)
+  await page.waitForTimeout(500)
+  await page.screenshot({ path: 'artifacts/screens/world3d-inspect.png' })
+})
