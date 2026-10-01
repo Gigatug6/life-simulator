@@ -31,6 +31,8 @@ export interface LifeExports {
   creature_species_ptr(): number
   creature_genome_ptr(): number
   genome_len(): number
+  stats_count(species: number): number
+  stats_mean_hidden(species: number): number
   rng_lo(): number
   rng_hi(): number
   rng_restore(lo: number, hi: number): void

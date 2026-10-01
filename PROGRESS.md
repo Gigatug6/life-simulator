@@ -1,7 +1,7 @@
 # PROGRESS — Simulateur de vie
 
 ## Statut
-- Phase courante : 2 — Créatures
+- Phase courante : 3 — Worker + rendu
 - Commandes : `make init`, `make install`, `make wasm`, `make check`, `make dev`, `make e2e`
 
 ## Checklist
@@ -20,15 +20,18 @@
 - [x] 2.3 Cerveau : MLP feed-forward (poids = génome), entrées (vision herbe/eau/voisins/énergie), sorties (avance, rotation, manger, reproduire)
 - [x] 2.4a Génomes SoA (185 f32/créature), RNG global sérialisé dans le snapshot
 - [x] 2.4b Dynamique : déplacement, métabolisme, manger l'herbe, mort, reproduction avec mutation, déterminisme
-- [ ] 2.5 Carnivores/prédation + équilibre de base (simulation headless : population ne s'éteint pas)
+- [x] 2.5 Carnivores/prédation + équilibre de base (simulation headless : population ne s'éteint pas)
 ### Phase 3 — Worker + rendu three.js instancié
+- [ ] 3.1 Protocole worker : boucle fixe (vitesse pause/×1/×4/×16/×64), snapshots transférables (positions, espèce, énergie) + commandes (init, spawn, pluie)
+- [ ] 3.2 Renderer three.js : caméra ortho, terrain en DataTexture (biomes + herbe + jour/nuit), zoom/pan
+- [ ] 3.3 Créatures en InstancedMesh (couleur par espèce/énergie), capture e2e relue
 ### Phase 4 — Persistance IndexedDB + rattrapage hors-ligne
 ### Phase 5 — Mode Dieu & UI
 ### Phase 6 — Intelligence avancée (structure évolutive, apprentissage, paliers)
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 2.5 : carnivores (prédation : capteurs de proies, attaque/gain d'énergie) + équilibrage par simulation headless (`cargo test` long ou export de stats `stats_*` : population par espèce, hidden moyen). Vérifier que la population herbivore ne sature pas à MAX ni ne s'éteint, régler les constantes de `life.rs`.
+Phase 3.1 : worker — boucle fixe avec vitesse réglable, messages `init/setSpeed/spawn/rain/snapshot`, envoi à l'UI de buffers transférables ; test e2e (les ticks avancent, créatures présentes).
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -39,6 +42,7 @@ Phase 2.5 : carnivores (prédation : capteurs de proies, attaque/gain d'énergie
 (aucun)
 
 ## Journal
+- 2.5 fait : carnivores (capteurs de proies, frappe à 1,6, gain 50 % de l'énergie de la proie, métabolisme ×1,6), `stats_count`/`stats_mean_hidden`, test d'équilibre herbivores (ni extinction ni saturation sur 3000 ticks), test de prédation, rapport `balance_report` (ignoré : `cargo test balance_report -- --ignored --nocapture`, `CARN=n`). `[profile.test] opt-level=3`. Réglage : BRAIN_COST 0.004→0.0008 (sinon la sélection réduisait les cerveaux). Observations : herbivores seuls ≈ 200-500 individus stables ; avec carnivores la pression de prédation fait monter les unités cachées des herbivores (4→6) mais les carnivores s'éteignent après un pic → à rééquilibrer en phase 6. Phase 2 terminée.
 - 2.4b fait : life.rs (sin/cos approchés, perception 10 entrées, décision MLP, déplacement bloqué par l'eau profonde, métabolisme avec coût par unité cachée, manger, mort, reproduction mutée), branché dans `tick` avec spatial hash. cargo 23 + Vitest 7 (dont reprise identique après restauration avec créatures). À surveiller en 2.5 : le test de restauration (200 créatures, 300 ticks) prend ~3 s → la population semble gonfler fortement (probable saturation), équilibrage nécessaire.
 - 2.4a fait : génomes stockés dans le SoA (`creature_genome_ptr`, kill copie le génome), RNG global (`rng_lo/hi/restore`) inclus dans le snapshot (section créatures = 16 octets d'en-tête), `GENOME_LEN` miroir TS vérifié par test. Tests Rust : Creatures alloué via `Box::new_zeroed` (15 Mo, pas sur la pile). cargo 20 + Vitest 6 verts.
 - 2.3 fait : brain.rs (MLP 10→≤12→4, tanh de Padé sans exp, génome plat de 185 f32 dont le nombre d'unités cachées est un gène muté ±1 → complexité évolutive, mutation gaussienne Irwin-Hall). cargo 20 verts. Mémoire : 185 f32 × 20 000 créatures ≈ 15 Mo une fois les génomes stockés (2.4a).

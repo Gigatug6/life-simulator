@@ -188,6 +188,18 @@ pub extern "C" fn rng_restore(lo: u32, hi: u32) {
     unsafe { RNG = rng::Rng(((hi as u64) << 32) | lo as u64) }
 }
 
+/// Nombre de créatures d'une espèce (statistiques pour l'UI).
+#[no_mangle]
+pub extern "C" fn stats_count(species: u32) -> u32 {
+    unsafe { life::count_species(&*core::ptr::addr_of!(CREATURES), species as u8) as u32 }
+}
+
+/// Unités cachées moyennes d'une espèce (indice de complexité cérébrale).
+#[no_mangle]
+pub extern "C" fn stats_mean_hidden(species: u32) -> f32 {
+    unsafe { life::mean_hidden(&*core::ptr::addr_of!(CREATURES), species as u8) }
+}
+
 #[no_mangle]
 pub extern "C" fn creature_kill(i: u32) {
     unsafe { (*core::ptr::addr_of_mut!(CREATURES)).kill(i as usize) }

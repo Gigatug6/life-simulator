@@ -1,6 +1,6 @@
 //! Dynamique des créatures : perception -> cerveau -> action -> métabolisme -> mort/reproduction.
 use crate::brain::{self, GENOME_LEN, IN};
-use crate::creatures::{Creatures, HERBIVORE};
+use crate::creatures::{Creatures, CARNIVORE, HERBIVORE};
 use crate::rng::Rng;
 use crate::spatial::SpatialHash;
 use crate::world::DEEP_WATER;
@@ -10,7 +10,7 @@ pub const MAX_SPEED: f32 = 0.6;
 pub const START_ENERGY: f32 = 50.0;
 pub const MAX_ENERGY: f32 = 120.0;
 const BASE_COST: f32 = 0.04;
-const BRAIN_COST: f32 = 0.004; // par unité cachée : l'intelligence a un prix
+const BRAIN_COST: f32 = 0.0008; // par unité cachée : l'intelligence a un prix
 const EAT_BITE: f32 = 0.25;
 const EAT_GAIN: f32 = 35.0;
 const BIRTH_THRESHOLD: f32 = 80.0;
@@ -19,6 +19,8 @@ const CHILD_ENERGY: f32 = 35.0;
 const MUT_RATE: f32 = 0.08;
 const MUT_SIGMA: f32 = 0.15;
 const LOOK: f32 = 3.0; // distance des capteurs
+const STRIKE_RANGE: f32 = 1.6;
+const KILL_GAIN: f32 = 0.5; // part de l'énergie de la proie récupérée
 const PI: f32 = 3.1415927;
 
 /// sin approché (pas de libm en no_std), précision ~1e-3.
@@ -69,6 +71,23 @@ impl Env<'_> {
     }
 }
 
+/// Nombre de créatures d'une espèce.
+pub fn count_species(c: &Creatures, species: u8) -> usize {
+    (0..c.count).filter(|&i| c.species[i] == species).count()
+}
+
+/// Nombre moyen d'unités cachées d'une espèce (indice simple de complexité cérébrale).
+pub fn mean_hidden(c: &Creatures, species: u8) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            sum += brain::hidden_count(&c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN]) as f32;
+            n += 1;
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
 /// Avance d'un tick. `grid` est reconstruite ici.
 pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut Rng) {
     let n = c.count;
@@ -86,7 +105,15 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         input[1] = c.energy[i] / MAX_ENERGY;
         for (k, off) in [-0.6f32, 0.0, 0.6].iter().enumerate() {
             let (sx, sy) = (x + cos(a + off) * LOOK, y + sin(a + off) * LOOK);
-            if let Some(cell) = env.cell(sx, sy) {
+            if c.species[i] == CARNIVORE {
+                let mut prey = 0u32;
+                grid.query(&c.x, &c.y, sx, sy, 4.0, |j, _| {
+                    if c.species[j] == HERBIVORE && c.energy[j] > 0.0 {
+                        prey += 1;
+                    }
+                });
+                input[2 + k] = (prey as f32 / 3.0).min(1.0);
+            } else if let Some(cell) = env.cell(sx, sy) {
                 input[2 + k] = env.grass[cell];
             }
             input[5 + k] = if env.blocked(sx, sy) { 1.0 } else { 0.0 };
@@ -111,7 +138,8 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
 
         // --- métabolisme ---
         let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
-        c.energy[i] -= BASE_COST + moved * moved * 0.12 + nh * BRAIN_COST;
+        let base = if c.species[i] == CARNIVORE { BASE_COST * 1.6 } else { BASE_COST };
+        c.energy[i] -= base + moved * moved * 0.12 + nh * BRAIN_COST;
 
         // --- manger (herbivores) ---
         if out[2] > 0.0 && c.species[i] == HERBIVORE {
@@ -119,6 +147,20 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
                 let bite = if env.grass[cell] < EAT_BITE { env.grass[cell] } else { EAT_BITE };
                 env.grass[cell] -= bite;
                 c.energy[i] = (c.energy[i] + bite * EAT_GAIN).min(MAX_ENERGY);
+            }
+        }
+
+        // --- chasser (carnivores) : frappe la proie vivante la plus proche ---
+        if out[2] > 0.0 && c.species[i] == CARNIVORE {
+            let mut best: Option<(usize, f32)> = None;
+            grid.query(&c.x, &c.y, c.x[i], c.y[i], STRIKE_RANGE, |j, d2| {
+                if c.species[j] == HERBIVORE && c.energy[j] > 0.0 && best.map_or(true, |(_, bd)| d2 < bd) {
+                    best = Some((j, d2));
+                }
+            });
+            if let Some((j, _)) = best {
+                c.energy[i] = (c.energy[i] + c.energy[j] * KILL_GAIN).min(MAX_ENERGY);
+                c.energy[j] = 0.0;
             }
         }
 
@@ -194,7 +236,11 @@ mod tests {
     }
 
     fn run(s: &mut Sim, ticks: u32) {
-        for t in 0..ticks {
+        run_from(s, 0, ticks)
+    }
+
+    fn run_from(s: &mut Sim, start: u32, ticks: u32) {
+        for t in start..start + ticks {
             crate::plants::step(&mut s.grass, &s.biome, W * H, t, 0.0);
             let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
             step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
@@ -220,6 +266,73 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), n, "ids uniques");
+    }
+
+    fn add_carnivores(s: &mut Sim, n: usize) {
+        let mut placed = 0;
+        while placed < n {
+            let (x, y) = (s.rng.next_f32() * W as f32, s.rng.next_f32() * H as f32);
+            if s.biome[y as usize * W + x as usize] >= world::PLAIN {
+                let mut g = [0.0; GENOME_LEN];
+                brain::random_genome(&mut g, &mut s.rng);
+                s.c.spawn(x, y, 0.0, START_ENERGY, CARNIVORE, 0, &g);
+                placed += 1;
+            }
+        }
+    }
+
+    #[test]
+    fn herbivore_population_neither_explodes_nor_dies_out() {
+        let mut s = sim(3, 300);
+        let mut min = usize::MAX;
+        let mut max = 0;
+        for chunk in 0..6 {
+            run_from(&mut s, chunk * 500, 500);
+            if chunk >= 3 {
+                min = min.min(s.c.count);
+            }
+            max = max.max(s.c.count);
+        }
+        assert!(min > 0, "extinction");
+        assert!(max < crate::creatures::MAX / 2, "saturation : {}", max);
+    }
+
+    #[test]
+    fn carnivores_kill_and_gain_energy() {
+        let mut s = sim(4, 0);
+        let g = [0.0; GENOME_LEN];
+        // un prédateur au cerveau forcé « manger/attaquer » (biais de sortie 2 positif) à côté d'une proie
+        let mut gp = g;
+        gp[brain::GENOME_LEN - 1] = 4.0;
+        let b2 = brain::GENOME_LEN - 1 - brain::OUT; // début de b2
+        gp[b2 + 2] = 5.0;
+        s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &gp);
+        s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &g);
+        for cell in s.biome.iter_mut() {
+            *cell = world::PLAIN;
+        }
+        run(&mut s, 1);
+        assert_eq!(count_species(&s.c, HERBIVORE), 0, "la proie est tuée");
+        assert!(s.c.energy[0] > 40.0, "le prédateur gagne de l'énergie : {}", s.c.energy[0]);
+    }
+
+    #[test]
+    #[ignore] // rapport d'équilibrage : cargo test balance_report -- --ignored --nocapture
+    fn balance_report() {
+        let mut s = sim(3, 300);
+        let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
+        add_carnivores(&mut s, nc);
+        for chunk in 0..12 {
+            run_from(&mut s, chunk * 500, 500);
+            println!(
+                "t={:5} herb={:5} carn={:4} hid_h={:.2} hid_c={:.2}",
+                (chunk + 1) * 500,
+                count_species(&s.c, HERBIVORE),
+                count_species(&s.c, CARNIVORE),
+                mean_hidden(&s.c, HERBIVORE),
+                mean_hidden(&s.c, CARNIVORE)
+            );
+        }
     }
 
     #[test]

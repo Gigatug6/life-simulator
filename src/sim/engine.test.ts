@@ -69,4 +69,16 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     e.world_init(1, 32, 32)
     expect(e.creature_count()).toBe(0)
   })
+
+  it('expose des statistiques par espèce', async () => {
+    const e = await loadEngine(readFileSync(wasmPath))
+    e.world_init(2, 64, 64)
+    e.creature_spawn(10, 10, 0)
+    e.creature_spawn(11, 10, 0)
+    e.creature_spawn(12, 10, 1)
+    expect(e.stats_count(0)).toBe(2)
+    expect(e.stats_count(1)).toBe(1)
+    expect(e.stats_mean_hidden(0)).toBe(4)
+    expect(e.stats_mean_hidden(1)).toBe(4)
+  })
 })
