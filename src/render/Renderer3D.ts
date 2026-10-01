@@ -7,6 +7,8 @@ import { writeInstances3d, writeShadows3d } from './instances3d'
 import { carnivoreGeometry, herbivoreGeometry } from './creatureModels'
 import { skyAt } from './sky'
 import { applySeason, seasonFactors, type SeasonFactors } from './seasons'
+import { Vegetation } from './Vegetation'
+import { buildLayout } from './vegetationLayout'
 import { SKY_FRAGMENT, SKY_VERTEX, WATER_FRAGMENT, WATER_VERTEX } from './shaders'
 import type { WorldRenderer } from './types'
 
@@ -64,6 +66,7 @@ export class Renderer3D implements WorldRenderer {
   private h = 0
 
   private bodies: [THREE.InstancedMesh, THREE.InstancedMesh] // herbivores, carnivores
+  private vegetation: Vegetation // trees, grass tufts, rocks
   private shadows: THREE.InstancedMesh // flat dark discs under the creatures
   private ring: THREE.Mesh
   private ringPos: { x: number; y: number } | null = null
@@ -95,6 +98,8 @@ export class Renderer3D implements WorldRenderer {
     )
     this.sky.renderOrder = -10
     this.scene.add(this.sky)
+
+    this.vegetation = new Vegetation(this.scene)
 
     // creatures: one InstancedMesh per species (low-poly bodies with vertex colours for eyes, ears, feet)
     const makeBodies = (geometry: THREE.BufferGeometry) => {
@@ -143,6 +148,7 @@ export class Renderer3D implements WorldRenderer {
     const loop = () => {
       this.raf = requestAnimationFrame(loop)
       this.controls.update()
+      this.keepCameraAboveGround()
       this.draw()
     }
     loop()
@@ -194,9 +200,10 @@ export class Renderer3D implements WorldRenderer {
     this.paint(this.lastGrass, this.currentSeason)
 
     this.buildWater()
+    this.vegetation.setTerrain(buildLayout(w, h, biome), this.ground, biome)
 
-    // starting point of view: above the south edge, looking at the island centre
-    this.controls.target.set(w / 2, 0, h / 2)
+    // starting point of view: above the south edge, looking at the island centre (at ground level there)
+    this.controls.target.set(w / 2, Math.max(this.ground.at(w / 2, h / 2), 0), h / 2)
     this.camera.position.set(w / 2, Math.max(w, h) * 0.62, h * 1.18)
     this.controls.update()
     this.uploadedScale = 0
@@ -315,6 +322,7 @@ export class Renderer3D implements WorldRenderer {
     if (grass.length !== this.w * this.h) return
     this.lastGrass = grass
     this.paint(grass, this.currentSeason)
+    this.vegetation.setGrass(grass)
   }
 
   /** The 3D view takes its lighting from the clock (`setClock`), not from a daylight factor. */
@@ -353,6 +361,7 @@ export class Renderer3D implements WorldRenderer {
 
     // seasons: repaint the terrain when the look changed noticeably
     const f = seasonFactors(tick)
+    this.vegetation.setSeason(f)
     if (Math.abs(f.autumn - this.paintedSeason.autumn) > 0.04 || Math.abs(f.winter - this.paintedSeason.winter) > 0.04) {
       this.paint(this.lastGrass, f)
     }
@@ -401,8 +410,17 @@ export class Renderer3D implements WorldRenderer {
     this.camera.updateProjectionMatrix()
   }
 
+  /** The camera never goes into the hills: it stays a little above the surface under it. */
+  private keepCameraAboveGround() {
+    if (!this.ground) return
+    const p = this.camera.position
+    const floor = Math.max(this.ground.at(p.x, p.z), 0) + 1.8
+    if (p.y < floor) p.y = floor
+  }
+
   private draw() {
     this.waterUniforms.uTime.value = performance.now() / 1000
+    this.vegetation.setDistance(this.camera.position.distanceTo(this.controls.target))
     this.sky.position.copy(this.camera.position)
     // creature size depends on the camera distance: rebuild the instances when it changed noticeably
     const ppc = this.pixelsPerCell
@@ -470,6 +488,7 @@ export class Renderer3D implements WorldRenderer {
       this.scene.remove(this.outerSea)
       this.outerSea.geometry.dispose() // its material is the water's, already disposed above
     }
+    this.vegetation.dispose()
     for (const m of [...this.bodies, this.shadows]) {
       this.scene.remove(m)
       m.geometry.dispose()

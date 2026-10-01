@@ -25,6 +25,24 @@ test('reloading the page resumes the same world from the browser cache', async (
   expect(await tickOf(page)).toBeLessThan(before + 200) // not a new world at 0, nor a jump
 })
 
+test('the chosen speed, pause included, is remembered across a reload', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
+  await page.getByRole('button', { name: '×4' }).click()
+  await page.reload()
+  await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
+  await expect(page.getByRole('button', { name: '×4' })).toBeDisabled() // the active speed button is disabled
+  await page.getByRole('button', { name: 'Pause' }).click()
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Pause' })).toBeDisabled()
+  // really paused: the world does not move
+  const t = async () => Number(/Tick : (\d+)/.exec((await page.getByTestId('ticks').textContent()) ?? '')?.[1])
+  await expect(page.getByTestId('ticks')).toBeVisible()
+  const a = await t()
+  await page.waitForTimeout(600)
+  expect(await t()).toBe(a)
+})
+
 test('a world saved long ago is caught up in a burst on resume', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')

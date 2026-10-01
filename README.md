@@ -34,6 +34,7 @@ Autres commandes :
 - **Molette / glisser / pincer** : zoomer et déplacer la vue.
 - **Barre du bas** (pouvoirs divins) : *Observer*, *Inspecter* (cliquez une créature : énergie, âge, génération et **schéma de son cerveau**), *Herbivores*, *Carnivores*, *Météorite*, *Bénédiction* (rayon réglable), puis *Pluie*, *Sécheresse*, *Beau temps*.
 - **Barre du haut** : tick, saison, jour/nuit, **indice d'intelligence** (0-100 avec paliers : Errants, Fourrageurs, Stratèges, Sages), population, vitesse (pause, ×1 à ×64), *Courbes* (population et intelligence dans le temps) et *Menu* (sauvegarder, exporter/importer un fichier `.life`, nouveau monde).
+- **Vue 3D** : le bouton « Vue 3D » affiche le monde en relief (glisser pour tourner, molette pour zoomer) avec ciel, soleil, lune, étoiles, eau animée, arbres et saisons ; la vitesse choisie (pause comprise) est mémorisée. L'adresse `…/?seed=13` crée un nouveau monde reproductible à partir d'une graine.
 - **Sauvegarde** : automatique toutes les 10 s (plus espacée pour un très gros monde), à la fermeture de l'onglet, et au rechargement le monde reprend là où il en était.
 - **Le temps passe même onglet fermé** : à la reprise, le temps écoulé est simulé en rafale (plafonné à 60 s de calcul / 300 000 ticks, avec barre de progression et bouton *Passer*). Plus vous laissez le monde vivre, plus ses habitants sont intelligents.
 

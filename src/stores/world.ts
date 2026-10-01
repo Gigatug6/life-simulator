@@ -4,13 +4,25 @@ import { History, forgetHistory, loadHistory, saveHistory, type Sample } from '.
 import { snapshotInfo } from '../sim/snapshot'
 import { createSaveStore, type SaveStore } from '../persist/store'
 import SimWorker from '../sim/worker?worker'
+import { SPEEDS } from '../sim/protocol'
+import { parseSeed } from '../sim/seed'
 import type { Frame, Inspected, FromWorker, Speed, ToWorker } from '../sim/protocol'
 
 /** World state on the UI side. Typed arrays stay out of deep reactivity. */
 export const useWorldStore = defineStore('world', () => {
   const status = ref('Chargement du moteur…')
   const ready = ref(false)
-  const speed = ref<Speed>(1)
+  const SPEED_KEY = 'life-simulator:ui:speed'
+  /** The chosen speed (pause included) is remembered across reloads. */
+  const readSpeed = (): Speed => {
+    try {
+      const v = Number(localStorage.getItem(SPEED_KEY))
+      return (SPEEDS as readonly number[]).includes(v) && localStorage.getItem(SPEED_KEY) !== null ? (v as Speed) : 1
+    } catch {
+      return 1
+    }
+  }
+  const speed = ref<Speed>(readSpeed())
   const ticksPerSecond = ref(0)
   const frame = shallowRef<Frame | null>(null)
   const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array; altitude: Float32Array } | null>(null)
@@ -55,7 +67,8 @@ export const useWorldStore = defineStore('world', () => {
     if (ready.value) send({ type: 'save' })
   }
 
-  async function start(seed = Math.floor(Math.random() * 2 ** 32), w = 256, h = 256) {
+  // a fresh world uses the seed of the page address (?seed=N) when there is one, otherwise a random seed
+  async function start(seed = parseSeed(location.search) ?? Math.floor(Math.random() * 2 ** 32), w = 256, h = 256) {
     stop()
     const gen = ++startGen
     status.value = 'Chargement du moteur…'
@@ -92,6 +105,7 @@ export const useWorldStore = defineStore('world', () => {
       if (m.type === 'ready') {
         ready.value = true
         restored.value = m.restored
+        send({ type: 'setSpeed', speed: speed.value }) // the worker starts at ×1: apply the remembered speed
         if (pendingImport) {
           pendingImport = false
           if (!m.restored) saveError.value = 'Fichier de sauvegarde invalide ou incompatible : un nouveau monde a été créé.'
@@ -181,7 +195,7 @@ export const useWorldStore = defineStore('world', () => {
     savedAt.value = null
     frame.value = null
     grass.value = null
-    await start()
+    await start(Math.floor(Math.random() * 2 ** 32)) // "New world" is always a different world, whatever the address says
   }
 
   function stop() {
@@ -222,6 +236,11 @@ export const useWorldStore = defineStore('world', () => {
 
   function setSpeed(s: Speed) {
     speed.value = s
+    try {
+      localStorage.setItem(SPEED_KEY, String(s))
+    } catch {
+      /* non-critical preference */
+    }
     send({ type: 'setSpeed', speed: s })
   }
 
