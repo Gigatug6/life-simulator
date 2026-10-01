@@ -8,6 +8,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
     core::arch::wasm32::unreachable()
 }
 
+pub mod brain;
 pub mod creatures;
 pub mod plants;
 pub mod rng;

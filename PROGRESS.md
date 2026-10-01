@@ -17,7 +17,7 @@
 ### Phase 2 — Créatures (SoA, spatial hash, cerveau, mutation)
 - [x] 2.1 Stockage SoA des créatures (x, y, angle, énergie, âge, espèce, génération), spawn/kill, export des positions, snapshot étendu
 - [x] 2.2 Spatial hash (grille de voisinage) + test de requête
-- [ ] 2.3 Cerveau : MLP feed-forward (poids = génome), entrées (vision herbe/eau/voisins/énergie), sorties (avance, rotation, manger, reproduire)
+- [x] 2.3 Cerveau : MLP feed-forward (poids = génome), entrées (vision herbe/eau/voisins/énergie), sorties (avance, rotation, manger, reproduire)
 - [ ] 2.4 Dynamique : déplacement, métabolisme, manger l'herbe, mort, reproduction avec mutation, déterminisme
 - [ ] 2.5 Carnivores/prédation + équilibre de base (simulation headless : population ne s'éteint pas)
 ### Phase 3 — Worker + rendu three.js instancié
@@ -27,7 +27,7 @@
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 2.3 : cerveau MLP en Rust (`brain.rs`) : génome = poids f32 (entrées 8 → cachée 8 → sorties 4, tanh approximé sans std), forward déterministe, mutation gaussienne approx., tests cargo.
+Phase 2.4 : dynamique dans `tick` — génomes SoA (GENOME_LEN par créature, kill/snapshot inclus), vision, déplacement, métabolisme, manger l'herbe, mort, reproduction avec `brain::mutate`, spatial hash branché, déterminisme. Découper en sous-commits si trop gros (2.4a génomes+snapshot, 2.4b dynamique).
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -38,6 +38,7 @@ Phase 2.3 : cerveau MLP en Rust (`brain.rs`) : génome = poids f32 (entrées 8 �
 (aucun)
 
 ## Journal
+- 2.3 fait : brain.rs (MLP 10→≤12→4, tanh de Padé sans exp, génome plat de 185 f32 dont le nombre d'unités cachées est un gène muté ±1 → complexité évolutive, mutation gaussienne Irwin-Hall). cargo 20 verts. Mémoire : 185 f32 × 20 000 créatures ≈ 15 Mo une fois les génomes stockés (2.4a).
 - 2.2 fait : spatial.rs (grille 8×8, tri par comptage, `query` à callback), test contre force brute (3000 points, 50 requêtes) + bords/vide. cargo 16 verts. Pas encore branché dans tick (viendra en 2.4).
 - 2.1 fait : creatures.rs (SoA 20 000, kill par échange, id stables), exports `creature_*`, `CREATURE_FIELDS` côté TS, snapshot v2 (section créatures). cargo 14 + Vitest 6 verts.
 - 1.3 fait : `world_seed/tick/rain/restore` + `src/sim/snapshot.ts` (format versionné « LIFE », en-tête 32 o + couches), test aller-retour identique après 200 ticks. Phase 1 terminée. Décision : la sérialisation est côté TS (zéro copie via vues mémoire) ; le Rust ne fait que restaurer les méta-données.
