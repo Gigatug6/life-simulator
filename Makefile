@@ -1,10 +1,13 @@
 prod:       ## build de production (Caddy) sur http://localhost:8080
 	docker compose --profile prod up -d --build web
 
+pages-check: ## teste le build GitHub Pages (sous-dossier /life-simulator/)
+	./scripts/pages-check.sh
+
 e2e-prod:   ## tests e2e sur le build de production
 	./scripts/e2e-prod.sh
 
-.PHONY: prod e2e-prod init build install dev up down logs check typecheck test wasm wasm-test e2e sh npm clean
+.PHONY: prod pages-check e2e-prod init build install dev up down logs check typecheck test wasm wasm-test e2e sh npm clean
 
 init:       ## génère .env (UID/GID) et build les images
 	./scripts/init-env.sh

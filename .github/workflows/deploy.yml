@@ -1,0 +1,81 @@
+# Publie le simulateur sur GitHub Pages à chaque push sur la branche principale (ou à la demande).
+# Réglage à faire UNE SEULE FOIS côté GitHub : Settings → Pages → Build and deployment → Source = « GitHub Actions ».
+# Le site est 100 % statique (aucune API) : tout est sauvegardé dans le navigateur des visiteurs.
+name: Déployer sur GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# une seule publication à la fois ; une plus récente remplace celle en cours
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Moteur de simulation : Rust -> WebAssembly (le .wasm n'est pas dans le dépôt)
+      - name: Tester et compiler le moteur Rust
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cd wasm
+          cargo test
+          cargo build --release --target wasm32-unknown-unknown
+          cp target/wasm32-unknown-unknown/release/life_sim.wasm ../src/sim/wasm/life.wasm
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      # Adresse du site : https://<compte>.github.io/<dépôt>/ (ou la racine pour <compte>.github.io / domaine perso)
+      - name: Calculer l'adresse de publication
+        id: site
+        env:
+          CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+        run: |
+          REPO="${GITHUB_REPOSITORY#*/}"
+          OWNER="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          if [ -n "$CUSTOM_DOMAIN" ]; then
+            BASE="/"; URL="https://${CUSTOM_DOMAIN}"
+          elif [ "$(echo "$REPO" | tr '[:upper:]' '[:lower:]')" = "${OWNER}.github.io" ]; then
+            BASE="/"; URL="https://${OWNER}.github.io"
+          else
+            BASE="/${REPO}/"; URL="https://${OWNER}.github.io/${REPO}"
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Publication sur $URL (base $BASE)"
+
+      - name: Construire le site
+        env:
+          BASE_PATH: ${{ steps.site.outputs.base }}
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

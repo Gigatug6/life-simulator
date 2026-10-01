@@ -1,0 +1,30 @@
+# Vérifie chaque Pull Request : tests du moteur Rust, types, tests unitaires, build.
+# (Les tests e2e tournent en local avec Docker : make e2e.)
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tester et compiler le moteur Rust
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cd wasm
+          cargo test
+          cargo build --release --target wasm32-unknown-unknown
+          cp target/wasm32-unknown-unknown/release/life_sim.wasm ../src/sim/wasm/life.wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
