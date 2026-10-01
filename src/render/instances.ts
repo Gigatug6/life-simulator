@@ -1,6 +1,6 @@
 /** Remplit les tampons d'instances (matrices 4×4 + couleurs) des créatures. Pur, testable. */
 
-export const MAX_ENERGY = 120 // miroir de life::MAX_ENERGY
+export const MAX_ENERGY = 100 // miroir de life::MAX_ENERGY
 const HERB: [number, number, number] = [1.0, 0.82, 0.25]
 const CARN: [number, number, number] = [1.0, 0.2, 0.18]
 

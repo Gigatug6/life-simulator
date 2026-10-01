@@ -5,18 +5,19 @@ use crate::rng::Rng;
 use crate::spatial::SpatialHash;
 use crate::world::DEEP_WATER;
 
-pub const MAX_AGE: u32 = 4000;
+pub const MAX_AGE: u32 = 2500;
 pub const MAX_SPEED: f32 = 0.6;
-pub const START_ENERGY: f32 = 50.0;
-pub const MAX_ENERGY: f32 = 120.0;
+pub const START_ENERGY: f32 = 40.0;
+pub const MAX_ENERGY: f32 = 100.0;
 const BASE_COST: f32 = 0.04;
 const BRAIN_COST: f32 = 0.0008; // par unité cachée : l'intelligence a un prix
 const EAT_BITE: f32 = 0.25;
-const EAT_GAIN: f32 = 35.0;
-const BIRTH_THRESHOLD: f32 = 80.0;
-const BIRTH_COST: f32 = 45.0;
-const CHILD_ENERGY: f32 = 25.0; // < BIRTH_COST : naître coûte de l'énergie (pas de création gratuite)
-const MATURITY: u32 = 300; // âge minimal pour se reproduire
+const EAT_COST: f32 = 0.03; // tenter de manger coûte un peu : « manger toujours » n'est plus gratuit
+const EAT_GAIN: f32 = 12.0; // une bouchée = ~3 énergie ≈ 60 ticks de vie : il faut chercher à manger en continu
+const BIRTH_THRESHOLD: f32 = 65.0;
+const BIRTH_COST: f32 = 35.0;
+const CHILD_ENERGY: f32 = 20.0; // < BIRTH_COST : naître coûte de l'énergie (pas de création gratuite)
+const MATURITY: u32 = 120; // âge minimal pour se reproduire
 const MUT_RATE: f32 = 0.08;
 const MUT_SIGMA: f32 = 0.15;
 const LOOK: f32 = 3.0; // distance des capteurs
@@ -160,7 +161,10 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
 
         // --- perception ---
         let mut input = [0.0f32; IN];
-        input[0] = 1.0;
+        // entrée 0 : herbe sous les pieds (le biais est déjà porté par chaque neurone)
+        if let Some(cell) = env.cell(x, y) {
+            input[0] = env.grass[cell];
+        }
         input[1] = c.energy[i] / MAX_ENERGY;
         for (k, off) in [-0.6f32, 0.0, 0.6].iter().enumerate() {
             let (sx, sy) = (x + cos(a + off) * LOOK, y + sin(a + off) * LOOK);
@@ -202,6 +206,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
 
         // --- manger (herbivores) ---
         if out[2] > 0.0 && c.species[i] == HERBIVORE {
+            c.energy[i] -= EAT_COST;
             if let Some(cell) = env.cell(c.x[i], c.y[i]) {
                 let bite = if env.grass[cell] < EAT_BITE { env.grass[cell] } else { EAT_BITE };
                 env.grass[cell] -= bite;

@@ -10,7 +10,7 @@ const W2 = B1 + BRAIN_HID_MAX
 const B2 = W2 + BRAIN_OUT * BRAIN_HID_MAX
 const HID_GENE = B2 + BRAIN_OUT
 
-export const INPUT_LABELS = ['Biais', 'Énergie', 'Nourriture ←', 'Nourriture ↑', 'Nourriture →', 'Obstacle ←', 'Obstacle ↑', 'Obstacle →', 'Voisins', 'Jour']
+export const INPUT_LABELS = ['Herbe ici', 'Énergie', 'Nourriture ←', 'Nourriture ↑', 'Nourriture →', 'Obstacle ←', 'Obstacle ↑', 'Obstacle →', 'Voisins', 'Jour']
 export const OUTPUT_LABELS = ['Avancer', 'Tourner', 'Manger / attaquer', 'Se reproduire']
 
 export function hiddenCount(genome: Float32Array): number {

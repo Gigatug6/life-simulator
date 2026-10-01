@@ -74,9 +74,10 @@ pub fn forward(genome: &[f32], input: &[f32; IN]) -> [f32; OUT] {
 /// tourner vers la nourriture, avancer vers elle, ne pas foncer dans un obstacle, s'en détourner.
 /// Sorties : [0] avancer (>0 = rapide), [1] tourner (<0 = vers la gauche, >0 = vers la droite).
 pub fn competence(genome: &[f32]) -> f32 {
-    const BASE: [f32; IN] = [1.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5];
+    const BASE: [f32; IN] = [0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5];
     // (entrée activée, sortie observée, signe attendu)
-    const PROBES: [(usize, usize, f32); 6] = [
+    const PROBES: [(usize, usize, f32); 7] = [
+        (0, 2, 1.0),  // herbe sous les pieds -> manger
         (2, 1, -1.0), // nourriture à gauche -> tourner à gauche
         (4, 1, 1.0),  // nourriture à droite -> tourner à droite
         (3, 0, 1.0),  // nourriture devant -> avancer
@@ -174,9 +175,9 @@ mod tests {
         g[W1 + IN + 4] = 4.0;
         g[W2 + HID_MAX] = -4.0; // sortie « tourner » : −h0
         g[W2 + HID_MAX + 1] = 4.0; // + h1
-        // 2 situations sur 6 parfaitement gérées + 4 neutres : (2×1 + 4×0,5) / 6 ≈ 0,667
+        // 2 situations sur 7 parfaitement gérées + 5 neutres : (2×1 + 5×0,5) / 7 ≈ 0,643
         let c = competence(&g);
-        assert!((c - 2.0 / 3.0).abs() < 0.02, "{}", c);
+        assert!((c - 4.5 / 7.0).abs() < 0.02, "{}", c);
         // aléatoire : proche de 0,5 en moyenne
         let mut rng = Rng::new(5);
         let mean: f32 = (0..400)
