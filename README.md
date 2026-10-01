@@ -3,7 +3,7 @@
 Un monde virtuel de nature (eau, plages, plaines, forêts, montagnes, saisons, jour/nuit, pluie) peuplé de **milliers de petites bestioles** qui broutent, chassent, se reproduisent… et **deviennent plus intelligentes avec le temps**. Vous observez, et vous pouvez intervenir : semer des créatures, déclencher une météorite, bénir une région, faire pleuvoir ou sécher le monde.
 
 - **Moteur** : Rust compilé en **WebAssembly** (sans crate externe), exécuté dans un Web Worker.
-- **Rendu** : three.js (vue du ciel, créatures instanciées), Vue 3 + Pinia pour l'interface.
+- **Rendu** : three.js, en **vue 2D** du ciel ou en **vue 3D** (relief, ciel, eau animée, arbres, bloom), Vue 3 + Pinia pour l'interface.
 - **Aucune API, aucun serveur** : tout est sauvegardé dans le cache du navigateur (IndexedDB).
 - **Rien n'est installé sur votre machine** : tout passe par Docker.
 
@@ -31,16 +31,16 @@ Autres commandes :
 
 ## Jouer
 
-- **Molette / glisser / pincer** : zoomer et déplacer la vue.
+- **Molette / glisser / pincer** : zoomer et déplacer la vue (en 3D : **clic gauche** glissé = se déplacer, **clic droit** glissé = tourner).
 - **Barre du bas** (pouvoirs divins) : *Observer*, *Inspecter* (cliquez une créature : énergie, âge, génération et **schéma de son cerveau**), *Herbivores*, *Carnivores*, *Météorite*, *Bénédiction* (rayon réglable), puis *Pluie*, *Sécheresse*, *Beau temps*.
 - **Barre du haut** : tick, saison, jour/nuit, **indice d'intelligence** (0-100 avec paliers : Errants, Fourrageurs, Stratèges, Sages), population, vitesse (pause, ×1 à ×64), *Courbes* (population et intelligence dans le temps) et *Menu* (sauvegarder, exporter/importer un fichier `.life`, nouveau monde).
-- **Vue 3D** : le bouton « Vue 3D » affiche le monde en relief (glisser pour tourner, molette pour zoomer) avec ciel, soleil, lune, étoiles, eau animée, arbres et saisons ; la vitesse choisie (pause comprise) est mémorisée. L'adresse `…/?seed=13` crée un nouveau monde reproductible à partir d'une graine.
+- **Vue 3D** : le bouton « Vue 3D » affiche le monde en relief (clic gauche glissé pour se déplacer, clic droit glissé pour tourner, molette pour zoomer) avec ciel, soleil, lune, étoiles, eau animée, arbres et saisons (automne orangé, neige en hiver), corps de créatures propres à chaque espèce, **bioluminescence et lucioles la nuit** (bloom), pluie visible, teinte de sécheresse, et des effets de Dieu spectaculaires (météorite qui tombe avec onde de choc et cratère, colonne de lumière de la bénédiction, traînée de la créature suivie). La case « Effets » les désactive sur une petite machine ; la vitesse choisie (pause comprise) est mémorisée. L'adresse `…/?seed=13` crée un nouveau monde reproductible à partir d'une graine.
 - **Sauvegarde** : automatique toutes les 10 s (plus espacée pour un très gros monde), à la fermeture de l'onglet, et au rechargement le monde reprend là où il en était.
 - **Le temps passe même onglet fermé** : à la reprise, le temps écoulé est simulé en rafale (plafonné à 60 s de calcul / 300 000 ticks, avec barre de progression et bouton *Passer*). Plus vous laissez le monde vivre, plus ses habitants sont intelligents.
 
 ## Comment les bestioles deviennent intelligentes
 
-1. Chaque créature a un **cerveau** (réseau de neurones : 10 entrées → jusqu'à 12 neurones cachés → 4 sorties « avancer / tourner / manger-attaquer / se reproduire »). Ses **gènes** sont les poids du réseau, et le nombre de neurones cachés évolue aussi.
+1. Chaque créature a un **cerveau** (réseau de neurones : 14 entrées → jusqu'à 12 neurones cachés → 5 sorties « avancer / tourner / manger-attaquer / se reproduire / briller »). Ses **gènes** sont les poids du réseau, le nombre de neurones cachés et le **type** de chaque neurone (classique, détecteur, interrupteur, onde) ; les nouveaux sens (danger, lumière des voisins, 2 cellules de mémoire) sont branchés par l'évolution. Le **corps** évolue aussi : taille, vitesse, vision et teinte de lignée, avec des compromis de coût (grand = bouchée plus grosse et défense contre les chasseurs, mais plus de métabolisme).
 2. **Sélection naturelle** : manger exige de chercher (une bouchée ne nourrit que ~60 ticks), se reproduire demande de l'énergie accumulée ; les descendants héritent du génome **muté**.
 3. **Apprentissage durant la vie** : règle hebbienne modulée par l'énergie gagnée sur la couche de sortie ; une fraction (25 %) de ce qui a été appris est transmise aux enfants.
 4. **Mesure** : l'indice d'intelligence est la *compétence comportementale* moyenne (le cerveau tourne-t-il vers la nourriture, avance-t-il vers elle, évite-t-il l'eau, mange-t-il sur l'herbe ?). 0 = hasard, 100 = parfait.
@@ -72,7 +72,8 @@ wasm/                  moteur Rust no_std (cdylib) : rng, world, plants, creatur
                        elite (mémoire des meilleurs génomes)
 src/sim/               pont TypeScript : engine (chargement WASM), controller (boucle, vitesse,
                        rattrapage), worker, snapshot (sérialisation versionnée), history, intelligence
-src/render/            three.js : Renderer, view (caméra), terrainColor, instances (créatures)
+src/render/            three.js : Renderer (2D), Renderer3D (relief, ciel, eau, végétation, bloom, effets),
+                       relief, sky, seasons, shaders, effects, creatureModels, instances / instances3d
 src/persist/           SaveStore : IndexedDB + repli mémoire
 src/stores/            Pinia : world (état + worker), god (outils), ui (panneaux)
 src/components/        TopBar, GodTools, Inspector, BrainView, Charts, LineChart, WorldView

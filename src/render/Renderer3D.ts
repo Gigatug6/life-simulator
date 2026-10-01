@@ -39,6 +39,7 @@ export class Renderer3D implements WorldRenderer {
   private scene = new THREE.Scene()
   private camera = new THREE.PerspectiveCamera(50, 1, 0.5, 2500)
   private controls: OrbitControls
+  private onContextMenu = (e: Event) => e.preventDefault()
 
   // lights: the directional light is the sun by day and the moon by night
   private hemi = new THREE.HemisphereLight(0xaed0f2, 0x4d5a3a, 0.6)
@@ -172,6 +173,11 @@ export class Renderer3D implements WorldRenderer {
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.08
     this.controls.maxPolarAngle = Math.PI * 0.47 // never go under the ground
+    // left drag moves over the ground, right drag turns around the target
+    this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
+    this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }
+    this.controls.screenSpacePanning = false
+    canvas.addEventListener('contextmenu', this.onContextMenu)
     this.controls.minDistance = 6
     this.controls.maxDistance = 450
 
@@ -554,6 +560,7 @@ export class Renderer3D implements WorldRenderer {
   dispose() {
     cancelAnimationFrame(this.raf)
     this.cleanup.forEach((f) => f())
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu)
     this.controls.dispose()
     this.disposeTerrain()
     const meshes = [this.sky, this.ring, ...(this.water ? [this.water] : [])]

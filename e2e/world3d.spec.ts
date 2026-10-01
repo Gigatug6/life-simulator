@@ -71,16 +71,18 @@ test('the 3D view shows the relief, can orbit, and switches back to 2D', { tag: 
   await page.screenshot({ path: 'artifacts/screens/world3d-overview.png' })
   expect(await distinctColours(page)).toBeGreaterThan(20) // daylight: a much richer image than the night
 
-  // orbit: dragging changes what is on screen
+  // left drag moves over the ground, right drag turns: each changes what is on screen
   const box = (await page.getByTestId('world-canvas').boundingBox())!
-  const before = await page.getByTestId('world-canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL())
-  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.6)
-  await page.mouse.down()
-  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.5, { steps: 8 })
-  await page.mouse.up()
-  await page.waitForTimeout(600)
-  const after = await page.getByTestId('world-canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL())
-  expect(after).not.toBe(before)
+  const shot = () => page.getByTestId('world-canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL())
+  for (const button of ['left', 'right'] as const) {
+    const before = await shot()
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.6)
+    await page.mouse.down({ button })
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.5, { steps: 8 })
+    await page.mouse.up({ button })
+    await page.waitForTimeout(600)
+    expect(await shot(), `${button} drag`).not.toBe(before)
+  }
   await page.mouse.wheel(0, -500) // zoom in
   await page.waitForTimeout(600)
   await page.screenshot({ path: 'artifacts/screens/world3d-orbit.png' })
