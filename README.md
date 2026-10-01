@@ -23,6 +23,7 @@ Autres commandes :
 | `make e2e` | tests Playwright sur le serveur de dev |
 | `make prod` | build de production servi par Caddy sur http://localhost:8080 |
 | `make e2e-prod` | tests Playwright sur le build de production |
+| `make pages-check` | teste le build GitHub Pages (sous-dossier `/life-simulator/`) |
 | `make wasm` / `make wasm-test` | compiler / tester le moteur Rust seul |
 | `make up` / `make down` | serveur de dev en arrière-plan / arrêt |
 
@@ -45,6 +46,22 @@ Autres commandes :
 5. **Renaissance** : si les herbivores s'éteignent presque, l'espèce repart de ses 8 meilleurs ancêtres mémorisés.
 
 Résultats mesurés (monde 128², herbivores seuls, cf. `PROGRESS.md`) : compétence 0,50 (hasard) → ~0,70 en 10 000 ticks. Les **carnivores** sont une pression ponctuelle : ils font monter l'intelligence des herbivores mais ne persistent pas durablement (Dieu peut en ressemer).
+
+## Mettre en ligne sur GitHub Pages
+
+Le site est 100 % statique (aucune API) : il peut être hébergé gratuitement par GitHub Pages. Le workflow `.github/workflows/deploy.yml` compile le moteur Rust en WebAssembly, teste, construit le site et le publie à chaque push sur `main` ou `master`.
+
+1. Créez un dépôt GitHub vide, puis envoyez-y le code :
+   ```sh
+   git remote add origin git@github.com:<compte>/<depot>.git
+   git push -u origin master
+   ```
+2. **Une seule fois**, sur GitHub : *Settings → Pages → Build and deployment → Source = « GitHub Actions »*.
+3. Le workflow se lance tout seul (onglet *Actions*). Le site est ensuite disponible sur `https://<compte>.github.io/<depot>/`.
+
+Détails : l'adresse de base est calculée automatiquement (sous-dossier `/<depot>/`, ou racine pour un dépôt `<compte>.github.io`). Pour un **domaine personnalisé**, définissez la variable de dépôt `CUSTOM_DOMAIN` (*Settings → Secrets and variables → Actions → Variables*). Le workflow `ci.yml` vérifie aussi chaque Pull Request. Chaque visiteur a **son propre monde**, sauvegardé dans son navigateur.
+
+Tester le build GitHub Pages en local (sous-dossier) : `make pages-check`.
 
 ## Architecture
 
