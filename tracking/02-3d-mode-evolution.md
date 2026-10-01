@@ -9,7 +9,7 @@ Demande de l'utilisateur : « ajouter un **mode 3D**, ajouter des **évolutions 
 ### S — Suivi
 - [x] S.1 Dossier `tracking/` (convention, index, modèle), ancien `PROGRESS.md` archivé, README et `CLAUDE.md` mis à jour
 
-- [ ] S.2 Demande utilisateur : noms de dossiers/fichiers et **commentaires de code en anglais** (dossier `tracking/` → `tracking/`, traduction de tous les commentaires et titres de tests ; l'UI reste en français)
+- [ ] S.2 Demande utilisateur : noms de dossiers/fichiers et **commentaires de code en anglais** (dossier `suivi` renommé `tracking/`, traduction de tous les commentaires et titres de tests ; l'UI reste en français)
 
 ### E — Évolution physique des créatures
 - [ ] E.1 Traits physiques héréditaires et mutables (taille, vitesse, vision, teinte de lignée) en Rust + snapshot v5 + inspecteur + rendu 2D
@@ -34,7 +34,7 @@ E.1 — traits physiques héréditaires.
 - Un fichier de suivi **par chat**, dans `tracking/` (demande utilisateur). L'ancien `PROGRESS.md` devient `tracking/01-initial-simulator.md`.
 - 3D avec three.js déjà présent (aucune nouvelle dépendance : `OrbitControls`, `EffectComposer`, `UnrealBloomPass` viennent de `three/examples`).
 - Le mode 2D reste disponible (bascule 2D/3D).
-- Langue (demande utilisateur) : dossiers, fichiers, code, commentaires et titres de tests en **anglais** ; interface et documentation en français. Le dossier `tracking/` a été renommé `tracking/`.
+- Langue (demande utilisateur) : dossiers, fichiers, code, commentaires et titres de tests en **anglais** ; interface et documentation en français. Le dossier initial `suivi/` a été renommé `tracking/`.
 
 ## Limites connues
 (à compléter)
