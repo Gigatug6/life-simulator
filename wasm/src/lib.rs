@@ -44,6 +44,7 @@ pub extern "C" fn add(a: i32, b: i32) -> i32 {
 static mut ALTITUDE: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
 static mut GRASS: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
 static mut RAIN: f32 = 0.0;
+static mut SEED: u32 = 0;
 static mut BIOME: [u8; world::MAX_W * world::MAX_H] = [0; world::MAX_W * world::MAX_H];
 static mut WIDTH: u32 = 0;
 static mut HEIGHT: u32 = 0;
@@ -66,6 +67,7 @@ pub extern "C" fn world_init(seed: u32, w: u32, h: u32) -> u32 {
         }
         TICKS = 0;
         RAIN = 0.0;
+        SEED = seed;
         WIDTH = w;
         HEIGHT = h;
     }
@@ -92,6 +94,38 @@ pub extern "C" fn world_altitude_ptr() -> *const f32 {
 #[no_mangle]
 pub extern "C" fn world_biome_ptr() -> *const u8 {
     core::ptr::addr_of!(BIOME) as *const u8
+}
+
+#[no_mangle]
+pub extern "C" fn world_seed() -> u32 {
+    unsafe { SEED }
+}
+
+#[no_mangle]
+pub extern "C" fn world_tick() -> u32 {
+    unsafe { TICKS }
+}
+
+#[no_mangle]
+pub extern "C" fn world_rain() -> f32 {
+    unsafe { RAIN }
+}
+
+/// Restaure les méta-données après que l'hôte a recopié altitude/biome/herbe dans la mémoire.
+/// Renvoie 0 si OK, 1 si dimensions invalides.
+#[no_mangle]
+pub extern "C" fn world_restore(seed: u32, w: u32, h: u32, tick: u32, rain: f32) -> u32 {
+    if w == 0 || h == 0 || w as usize > world::MAX_W || h as usize > world::MAX_H {
+        return 1;
+    }
+    unsafe {
+        SEED = seed;
+        WIDTH = w;
+        HEIGHT = h;
+        TICKS = tick;
+        RAIN = rain;
+    }
+    0
 }
 
 /// Pointeur vers l'herbe f32 (w*h), valeurs 0..capacité.

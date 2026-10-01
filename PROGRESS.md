@@ -1,7 +1,7 @@
 # PROGRESS — Simulateur de vie
 
 ## Statut
-- Phase courante : 1 — Noyau WASM
+- Phase courante : 2 — Créatures
 - Commandes : `make init`, `make install`, `make wasm`, `make check`, `make dev`, `make e2e`
 
 ## Checklist
@@ -13,8 +13,13 @@
 ### Phase 1 — Noyau WASM (RNG, grille, biomes, plantes/saisons)
 - [x] 1.1 RNG xorshift + monde (altitude, biomes) + pont TS (`biomeView`, `altitudeView`)
 - [x] 1.2 Plantes : couche d'herbe (repousse logistique selon fertilité/biome), saisons, jour/nuit, pluie
-- [ ] 1.3 Snapshot mémoire du monde (sérialisation/restauration en octets) pour la persistance
+- [x] 1.3 Snapshot mémoire du monde (sérialisation/restauration en octets) pour la persistance
 ### Phase 2 — Créatures (SoA, spatial hash, cerveau, mutation)
+- [ ] 2.1 Stockage SoA des créatures (x, y, angle, énergie, âge, espèce, génération), spawn/kill, export des positions, snapshot étendu
+- [ ] 2.2 Spatial hash (grille de voisinage) + test de requête
+- [ ] 2.3 Cerveau : MLP feed-forward (poids = génome), entrées (vision herbe/eau/voisins/énergie), sorties (avance, rotation, manger, reproduire)
+- [ ] 2.4 Dynamique : déplacement, métabolisme, manger l'herbe, mort, reproduction avec mutation, déterminisme
+- [ ] 2.5 Carnivores/prédation + équilibre de base (simulation headless : population ne s'éteint pas)
 ### Phase 3 — Worker + rendu three.js instancié
 ### Phase 4 — Persistance IndexedDB + rattrapage hors-ligne
 ### Phase 5 — Mode Dieu & UI
@@ -22,7 +27,7 @@
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 1.3 : snapshot mémoire du monde (octets : graine, tick, pluie, altitude, biome, herbe) — `world_snapshot_*` / `world_restore` en Rust, test aller-retour Vitest.
+Phase 2.1 : stockage SoA des créatures en Rust (capacité 20 000), `creature_spawn`/`creature_kill`, pointeurs d'export, extension du snapshot TS (version 2), tests.
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -33,6 +38,7 @@ Phase 1.3 : snapshot mémoire du monde (octets : graine, tick, pluie, altitude, 
 (aucun)
 
 ## Journal
+- 1.3 fait : `world_seed/tick/rain/restore` + `src/sim/snapshot.ts` (format versionné « LIFE », en-tête 32 o + couches), test aller-retour identique après 200 ticks. Phase 1 terminée. Décision : la sérialisation est côté TS (zéro copie via vues mémoire) ; le Rust ne fait que restaurer les méta-données.
 - 1.2 fait : plants.rs (herbe logistique, capacité par biome, saisons, jour/nuit en ondes triangulaires sans sin), pluie divine `world_set_rain`, tick() met à jour l'herbe (1 cellule sur 4). cargo 11 + Vitest 3 verts. Bug corrigé : daylight avait un déphasage de 0,25.
 - 1.1 fait : rng.rs, world.rs (bruit de valeurs 4 octaves + île + biomes), exports `world_*`, tests cargo (7) + Vitest (2) verts.
 - Phase 0 terminée : `make check` (cargo test + typecheck + vitest + build) et `make e2e` (smoke WASM dans worker) verts. Correction : `no_std`/panic_handler conditionnés à `target_arch = "wasm32"` pour que `cargo test` fonctionne.

@@ -12,6 +12,10 @@ export interface LifeExports {
   world_season(): number
   world_daylight(): number
   world_set_rain(v: number): void
+  world_seed(): number
+  world_tick(): number
+  world_rain(): number
+  world_restore(seed: number, w: number, h: number, tick: number, rain: number): number
   memory: WebAssembly.Memory
 }
 
