@@ -34,6 +34,12 @@ export interface LifeExports {
   creature_genome_ptr(): number
   genome_len(): number
   learn_len(): number
+  world_rescues(): number
+  elite_count(): number
+  elite_slots(): number
+  elite_scores_ptr(): number
+  elite_genomes_ptr(): number
+  elites_restore(count: number, rescues: number): number
   creature_learned_ptr(): number
   world_populate(species: number, count: number): number
   stats_count(species: number): number
@@ -73,6 +79,8 @@ export function grassView(e: LifeExports): Float32Array {
 export const GENOME_LEN = 185
 /** Deltas appris par créature (miroir de brain::LEARN_LEN). */
 export const LEARN_LEN = 48
+/** Emplacements de la mémoire des élites (miroir de elite::ELITES). */
+export const ELITE_SLOTS = 8
 
 /** Champs SoA des créatures : nom, taille d'un élément, constructeur de vue, getter de pointeur. */
 export const CREATURE_FIELDS = [

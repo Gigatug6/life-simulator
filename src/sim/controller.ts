@@ -124,6 +124,7 @@ export class SimController {
       carnivores: e.stats_count(1),
       hiddenHerbivores: e.stats_mean_hidden(0),
       hiddenCarnivores: e.stats_mean_hidden(1),
+      rescues: e.world_rescues(),
       iqHerbivores: this.iq.herb,
       iqCarnivores: this.iq.carn,
       x: creatureView(e, 'x').slice(),

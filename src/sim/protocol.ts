@@ -54,6 +54,8 @@ export interface Frame {
   hiddenHerbivores: number
   hiddenCarnivores: number
   /** Indice d'intelligence 0-100 par espèce (null si l'espèce est absente). */
+  /** Nombre de renaissances (herbivores presque éteints, repeuplés depuis les meilleurs ancêtres). */
+  rescues: number
   iqHerbivores: number | null
   iqCarnivores: number | null
   x: Float32Array

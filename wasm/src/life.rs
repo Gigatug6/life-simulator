@@ -1,6 +1,7 @@
 //! Dynamique des créatures : perception -> cerveau -> action -> métabolisme -> mort/reproduction.
 use crate::brain::{self, GENOME_LEN, IN, LEARN_LEN};
 use crate::creatures::{Creatures, CARNIVORE, HERBIVORE};
+use crate::elite::Elites;
 use crate::rng::Rng;
 use crate::spatial::SpatialHash;
 use crate::world::DEEP_WATER;
@@ -21,8 +22,8 @@ const MATURITY: u32 = 120; // âge minimal pour se reproduire
 const MUT_RATE: f32 = 0.08;
 const MUT_SIGMA: f32 = 0.15;
 const LOOK: f32 = 3.0; // distance des capteurs
-const STRIKE_RANGE: f32 = 1.6;
-const KILL_GAIN: f32 = 0.5; // part de l'énergie de la proie récupérée
+const STRIKE_RANGE: f32 = 1.8;
+const KILL_GAIN: f32 = 0.6; // part de l'énergie de la proie récupérée
 const PI: f32 = 3.1415927;
 
 /// sin approché (pas de libm en no_std), précision ~1e-3.
@@ -160,6 +161,60 @@ pub fn mean_phenotype_competence(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
+const MIN_HERBIVORES: usize = 12; // en dessous, l'espèce renaît de ses meilleurs ancêtres
+const RESCUE_CHECK: u32 = 500; // une renaissance possible tous les 500 ticks au plus (sinon c'est une réserve de proies sans fin)
+const ELITE_CHECK: u32 = 250; // fréquence de mise à jour de la mémoire des élites (ticks)
+const ELITE_MIN_AGE: u32 = 300;
+
+/// Entretien périodique : mémorise le meilleur herbivore adulte, et repeuple si l'espèce s'éteint.
+/// Renvoie le nombre de naissances « par renaissance ».
+pub fn maintain(c: &mut Creatures, elites: &mut Elites, env: &Env, rng: &mut Rng, tick: u32) -> u32 {
+    if tick % ELITE_CHECK == 0 {
+        let mut best: Option<(usize, f32)> = None;
+        for i in 0..c.count {
+            if c.species[i] == HERBIVORE && c.age[i] >= ELITE_MIN_AGE {
+                let comp = brain::competence(&c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN]);
+                if best.map_or(true, |(_, b)| comp > b) {
+                    best = Some((i, comp));
+                }
+            }
+        }
+        if let Some((i, comp)) = best {
+            elites.consider(&c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN], comp);
+        }
+    }
+    if tick % RESCUE_CHECK != 0 {
+        return 0;
+    }
+    let herb = count_species(c, HERBIVORE);
+    if herb >= MIN_HERBIVORES {
+        return 0;
+    }
+    let mut born = 0;
+    let mut tries = 0;
+    while herb + (born as usize) < MIN_HERBIVORES && tries < 2000 {
+        tries += 1;
+        let (x, y) = (rng.next_f32() * env.w as f32, rng.next_f32() * env.h as f32);
+        if env.blocked(x, y) || env.biome[y as usize * env.w + x as usize] < crate::world::PLAIN {
+            continue;
+        }
+        let mut genome = [0.0f32; GENOME_LEN];
+        match elites.pick(rng) {
+            Some(parent) => brain::mutate(&mut genome, parent, rng, 0.1, MUT_SIGMA),
+            None => brain::random_genome(&mut genome, rng),
+        }
+        let ang = rng.next_f32() * 2.0 * PI;
+        if c.spawn(x, y, ang, START_ENERGY, HERBIVORE, 0, &genome).is_none() {
+            break;
+        }
+        born += 1;
+    }
+    if born > 0 {
+        elites.rescues += 1;
+    }
+    born
+}
+
 /// Avance d'un tick. `grid` est reconstruite ici.
 pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut Rng) {
     let n = c.count;
@@ -217,7 +272,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
 
         // --- métabolisme ---
         let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
-        let base = if c.species[i] == CARNIVORE { BASE_COST * 1.6 } else { BASE_COST };
+        let base = if c.species[i] == CARNIVORE { BASE_COST * 1.3 } else { BASE_COST };
         c.energy[i] -= base + moved * moved * 0.12 + nh * BRAIN_COST;
 
         // --- manger (herbivores) ---
@@ -296,6 +351,7 @@ mod tests {
         biome: Vec<u8>,
         grass: Vec<f32>,
         rng: Rng,
+        elites: Box<Elites>,
     }
 
     const W: usize = 128;
@@ -318,7 +374,9 @@ mod tests {
                 placed += 1;
             }
         }
-        Sim { c, grid: Box::new(SpatialHash::new()), biome, grass, rng }
+        let mut elites = unsafe { Box::<Elites>::new_zeroed().assume_init() };
+        elites.clear();
+        Sim { c, grid: Box::new(SpatialHash::new()), biome, grass, rng, elites }
     }
 
     fn run(s: &mut Sim, ticks: u32) {
@@ -330,7 +388,32 @@ mod tests {
             crate::plants::step(&mut s.grass, &s.biome, W * H, t, 0.0);
             let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
             step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+            maintain(&mut s.c, &mut s.elites, &env, &mut s.rng, t + 1);
         }
+    }
+
+    #[test]
+    fn extinct_species_is_reborn_from_its_best_ancestors() {
+        let mut s = sim(3, 300);
+        run(&mut s, 1500); // la mémoire des élites se remplit
+        assert!(s.elites.count > 0);
+        let best = (0..s.elites.count).map(|k| s.elites.score[k]).fold(0.0f32, f32::max);
+        // cataclysme : plus aucune créature
+        for i in (0..s.c.count).rev() {
+            s.c.kill(i);
+        }
+        assert_eq!(s.c.count, 0);
+        let env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        let born = maintain(&mut s.c, &mut s.elites, &env, &mut s.rng, 500);
+        assert_eq!(born as usize, MIN_HERBIVORES);
+        assert_eq!(s.c.count, MIN_HERBIVORES);
+        assert_eq!(s.elites.rescues, 1);
+        // les renaissants descendent des élites : bien meilleurs que le hasard
+        let comp = mean_competence(&s.c, HERBIVORE);
+        assert!(comp > best - 0.15, "renaissance {} vs meilleure élite {}", comp, best);
+        // pas de renaissance si la population est suffisante
+        let env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        assert_eq!(maintain(&mut s.c, &mut s.elites, &env, &mut s.rng, 1000), 0);
     }
 
     #[test]
@@ -431,6 +514,19 @@ mod tests {
         run(&mut s, 1);
         assert_eq!(count_species(&s.c, HERBIVORE), 0, "la proie est tuée");
         assert!(s.c.energy[0] > 40.0, "le prédateur gagne de l'énergie : {}", s.c.energy[0]);
+    }
+
+    #[test]
+    fn long_run_with_predators_herbivores_survive_and_get_smarter() {
+        let mut s = sim(3, 300);
+        add_carnivores(&mut s, 8);
+        let start = mean_competence(&s.c, HERBIVORE);
+        run(&mut s, 8000);
+        assert!(count_species(&s.c, HERBIVORE) > 0, "les herbivores ont disparu");
+        let end = mean_competence(&s.c, HERBIVORE);
+        assert!((start - 0.5).abs() < 0.1, "départ aléatoire : {}", start);
+        assert!(end > 0.58, "l'intelligence doit avoir progressé : {} -> {}", start, end);
+        assert!(s.c.count < crate::creatures::MAX / 4);
     }
 
     #[test]

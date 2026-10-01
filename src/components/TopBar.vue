@@ -33,6 +33,7 @@ function onNewWorld() {
     <template v-if="f">
       <span class="chip" data-testid="ticks">Tick : {{ f.tick }} · {{ SEASONS[f.season] }} · {{ f.daylight > 0.5 ? 'jour' : 'nuit' }}</span>
       <span v-if="iq !== null" class="chip" data-testid="iq" title="Compétence comportementale moyenne : 0 = hasard, 100 = parfaite">Intelligence : {{ Math.round(iq) }} · {{ levelOf(iq).name }}</span>
+      <span v-if="f.rescues > 0" class="chip" data-testid="rescues" title="Les herbivores étaient presque éteints : l'espèce est repartie de ses meilleurs ancêtres">Renaissances : {{ f.rescues }}</span>
       <span class="chip" data-testid="population">Population : {{ f.count }} (herbivores {{ f.herbivores }}, carnivores {{ f.carnivores }})</span>
     </template>
     <span class="speeds" role="group" aria-label="Vitesse">

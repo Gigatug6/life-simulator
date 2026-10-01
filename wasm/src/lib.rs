@@ -10,6 +10,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 pub mod brain;
 pub mod creatures;
+pub mod elite;
 pub mod life;
 pub mod plants;
 pub mod rng;
@@ -35,16 +36,18 @@ pub extern "C" fn tick() -> u32 {
             let bio = &*core::ptr::addr_of!(BIOME);
             plants::step(&mut grass[..n], &bio[..n], n, TICKS, RAIN);
             let c = &mut *core::ptr::addr_of_mut!(CREATURES);
+            let mut env = life::Env {
+                w: WIDTH as usize,
+                h: HEIGHT as usize,
+                biome: &bio[..n],
+                grass: &mut grass[..n],
+                daylight: plants::daylight(TICKS),
+            };
+            let rng = &mut *core::ptr::addr_of_mut!(RNG);
             if c.count > 0 {
-                let mut env = life::Env {
-                    w: WIDTH as usize,
-                    h: HEIGHT as usize,
-                    biome: &bio[..n],
-                    grass: &mut grass[..n],
-                    daylight: plants::daylight(TICKS),
-                };
-                life::step(c, &mut *core::ptr::addr_of_mut!(GRID), &mut env, &mut *core::ptr::addr_of_mut!(RNG));
+                life::step(c, &mut *core::ptr::addr_of_mut!(GRID), &mut env, rng);
             }
+            life::maintain(c, &mut *core::ptr::addr_of_mut!(ELITES), &env, rng, TICKS);
             RAIN *= 0.999; // la pluie s'estompe lentement
         }
         TICKS
@@ -60,6 +63,7 @@ static mut ALTITUDE: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * w
 static mut GRASS: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
 static mut CREATURES: creatures::Creatures = creatures::Creatures::new();
 static mut GRID: spatial::SpatialHash = spatial::SpatialHash::new();
+static mut ELITES: elite::Elites = elite::Elites::new();
 static mut RAIN: f32 = 0.0;
 static mut SEED: u32 = 0;
 static mut RNG: rng::Rng = rng::Rng(1);
@@ -87,6 +91,7 @@ pub extern "C" fn world_init(seed: u32, w: u32, h: u32) -> u32 {
         RAIN = 0.0;
         RNG = rng::Rng::new(seed as u64 ^ 0xC0FFEE);
         (*core::ptr::addr_of_mut!(CREATURES)).clear();
+        (*core::ptr::addr_of_mut!(ELITES)).clear();
         SEED = seed;
         WIDTH = w;
         HEIGHT = h;
@@ -245,6 +250,46 @@ pub extern "C" fn world_populate(species: u32, count: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn stats_competence(species: u32) -> f32 {
     unsafe { life::mean_competence(&*core::ptr::addr_of!(CREATURES), species as u8) }
+}
+
+/// Renaissances déclenchées depuis le début du monde (l'espèce était presque éteinte).
+#[no_mangle]
+pub extern "C" fn world_rescues() -> u32 {
+    unsafe { (*core::ptr::addr_of!(ELITES)).rescues }
+}
+
+#[no_mangle]
+pub extern "C" fn elite_count() -> u32 {
+    unsafe { (*core::ptr::addr_of!(ELITES)).count as u32 }
+}
+
+#[no_mangle]
+pub extern "C" fn elite_scores_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(ELITES.score) as *const f32 }
+}
+
+#[no_mangle]
+pub extern "C" fn elite_genomes_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(ELITES.genome) as *const f32 }
+}
+
+#[no_mangle]
+pub extern "C" fn elite_slots() -> u32 {
+    elite::ELITES as u32
+}
+
+/// Restaure la mémoire des élites après recopie des tableaux par l'hôte.
+#[no_mangle]
+pub extern "C" fn elites_restore(count: u32, rescues: u32) -> u32 {
+    if count as usize > elite::ELITES {
+        return 1;
+    }
+    unsafe {
+        let e = &mut *core::ptr::addr_of_mut!(ELITES);
+        e.count = count as usize;
+        e.rescues = rescues;
+    }
+    0
 }
 
 #[no_mangle]

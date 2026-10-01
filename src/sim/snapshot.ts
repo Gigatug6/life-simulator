@@ -2,11 +2,13 @@
  * Sérialisation binaire de l'état du monde (persistance navigateur).
  * Format : en-tête de 32 octets (little-endian) puis altitude f32, biome u8, herbe f32.
  */
-import { CREATURE_FIELDS, altitudeView, biomeView, grassView, type LifeExports } from './engine'
+import { CREATURE_FIELDS, ELITE_SLOTS, GENOME_LEN, altitudeView, biomeView, grassView, type LifeExports } from './engine'
 
 export const SNAPSHOT_MAGIC = 0x4c494645 // « LIFE »
-export const SNAPSHOT_VERSION = 3
+export const SNAPSHOT_VERSION = 4
 const HEADER = 32
+/** Section « élites » : count + rescues (2 u32), scores f32, génomes f32. */
+const ELITE_BYTES = 8 + ELITE_SLOTS * 4 + ELITE_SLOTS * GENOME_LEN * 4
 
 export function takeSnapshot(e: LifeExports): Uint8Array {
   const w = e.world_width()
@@ -14,7 +16,7 @@ export function takeSnapshot(e: LifeExports): Uint8Array {
   const n = w * h
   const nc = e.creature_count()
   const creatureBytes = CREATURE_FIELDS.reduce((a, f) => a + f.size * nc, 0)
-  const out = new Uint8Array(HEADER + n * 9 + 16 + creatureBytes)
+  const out = new Uint8Array(HEADER + n * 9 + 16 + creatureBytes + ELITE_BYTES)
   const dv = new DataView(out.buffer)
   dv.setUint32(0, SNAPSHOT_MAGIC, true)
   dv.setUint32(4, SNAPSHOT_VERSION, true)
@@ -38,6 +40,13 @@ export function takeSnapshot(e: LifeExports): Uint8Array {
     out.set(new Uint8Array(e.memory.buffer, e[f.ptr](), nc * f.size), off)
     off += nc * f.size
   }
+  // mémoire des élites (renaissance après extinction)
+  dv.setUint32(off, e.elite_count(), true)
+  dv.setUint32(off + 4, e.world_rescues(), true)
+  off += 8
+  out.set(new Uint8Array(e.memory.buffer, e.elite_scores_ptr(), ELITE_SLOTS * 4), off)
+  off += ELITE_SLOTS * 4
+  out.set(new Uint8Array(e.memory.buffer, e.elite_genomes_ptr(), ELITE_SLOTS * GENOME_LEN * 4), off)
   return out
 }
 
@@ -52,7 +61,7 @@ export function restoreSnapshot(e: LifeExports, data: Uint8Array): boolean {
   if (n === 0 || data.length < HEADER + n * 9 + 16) return false
   const nc = dv.getUint32(HEADER + n * 9, true)
   const creatureBytes = CREATURE_FIELDS.reduce((a, f) => a + f.size * nc, 0)
-  if (data.length !== HEADER + n * 9 + 16 + creatureBytes) return false
+  if (data.length !== HEADER + n * 9 + 16 + creatureBytes + ELITE_BYTES) return false
   // world_init valide les dimensions et prépare la mémoire ; on écrase ensuite les couches.
   if (e.world_init(dv.getUint32(8, true), w, h) !== 0) return false
   new Uint8Array(altitudeView(e).buffer, altitudeView(e).byteOffset, n * 4).set(data.subarray(HEADER, HEADER + n * 4))
@@ -67,7 +76,13 @@ export function restoreSnapshot(e: LifeExports, data: Uint8Array): boolean {
     new Uint8Array(e.memory.buffer, e[f.ptr](), nc * f.size).set(data.subarray(off, off + nc * f.size))
     off += nc * f.size
   }
-  return true
+  const eliteCount = dv.getUint32(off, true)
+  const rescues = dv.getUint32(off + 4, true)
+  off += 8
+  new Uint8Array(e.memory.buffer, e.elite_scores_ptr(), ELITE_SLOTS * 4).set(data.subarray(off, off + ELITE_SLOTS * 4))
+  off += ELITE_SLOTS * 4
+  new Uint8Array(e.memory.buffer, e.elite_genomes_ptr(), ELITE_SLOTS * GENOME_LEN * 4).set(data.subarray(off, off + ELITE_SLOTS * GENOME_LEN * 4))
+  return e.elites_restore(eliteCount, rescues) === 0
 }
 
 export interface SnapshotInfo {
@@ -89,6 +104,6 @@ export function snapshotInfo(data: Uint8Array): SnapshotInfo | null {
   if (n === 0 || n > 512 * 512 || data.length < HEADER + n * 9 + 16) return null
   const creatures = dv.getUint32(HEADER + n * 9, true)
   const perCreature = CREATURE_FIELDS.reduce((a, f) => a + f.size, 0)
-  if (data.length !== HEADER + n * 9 + 16 + creatures * perCreature) return null
+  if (data.length !== HEADER + n * 9 + 16 + creatures * perCreature + ELITE_BYTES) return null
   return { seed: dv.getUint32(8, true), tick: dv.getUint32(20, true), w, h, creatures }
 }

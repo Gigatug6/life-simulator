@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { Biome, GENOME_LEN, LEARN_LEN, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
+import { Biome, ELITE_SLOTS, GENOME_LEN, LEARN_LEN, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
@@ -86,5 +86,20 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(Math.abs(e.stats_competence(0) - 0.5)).toBeLessThan(0.2)
     e.world_init(2, 64, 64)
     expect(e.stats_competence(1)).toBe(0)
+  })
+
+  it("renaît de ses meilleurs ancêtres après une extinction", async () => {
+    const e = await loadEngine(readFileSync(wasmPath))
+    expect(e.elite_slots()).toBe(ELITE_SLOTS)
+    e.world_init(31, 128, 128)
+    e.world_populate(0, 200)
+    for (let i = 0; i < 1500; i++) e.tick()
+    expect(e.elite_count()).toBeGreaterThan(0) // la mémoire des élites s'est remplie
+    e.world_meteor(64, 64, 500) // cataclysme
+    expect(e.creature_count()).toBe(0)
+    for (let i = 0; i < 500; i++) e.tick() // la vérification a lieu tous les 500 ticks
+    expect(e.world_rescues()).toBe(1)
+    expect(e.stats_count(0)).toBeGreaterThanOrEqual(12)
+    expect(e.stats_competence(0)).toBeGreaterThan(0.55) // descendants des élites, pas des cerveaux au hasard
   })
 })

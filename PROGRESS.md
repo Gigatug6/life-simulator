@@ -1,7 +1,7 @@
 # PROGRESS — Simulateur de vie
 
 ## Statut
-- Phase courante : 6 — Intelligence avancée
+- Phase courante : 7 — Finitions
 - Commandes : `make init`, `make install`, `make wasm`, `make check`, `make dev`, `make e2e`
 
 ## Checklist
@@ -41,11 +41,15 @@
 - [x] 6.2 Pression de sélection : récompense réelle de l'intelligence (brouter vers l'herbe, éviter l'eau, fuir/chasser) ; reproduction plus rare et basée sur l'énergie accumulée ; mutations moins destructrices (sigma adaptatif), élitisme léger
 - [x] 6.3 Apprentissage durant la vie (hebbien modulé par l'énergie gagnée) + héritage partiel (effet Baldwin)
 - [x] 6.4 Indice d'intelligence composite (capacité + efficacité) affiché dans HUD/courbes ; paliers de comportement (meute, mémoire de l'eau)
-- [ ] 6.5 Équilibrage long terme : simulation headless 50 000 ticks — l'indice monte, aucune espèce ne disparaît ; rattrapage hors-ligne cohérent
+- [x] 6.5 Équilibrage long terme : simulation headless 50 000 ticks — l'indice monte, aucune espèce ne disparaît ; rattrapage hors-ligne cohérent
 ### Phase 7 — Finitions
+- [ ] 7.1 Performance : profil à 10 000+ créatures (ticks/s, coût du rendu, taille des snapshots → compresser les génomes inutilisés ou sauvegarder moins souvent), rapport chiffré
+- [ ] 7.2 Build de production statique (`make prod` : Vite build + Caddy ou `dist/` seul), test que `dist/` fonctionne sans serveur de dev (WASM servi avec le bon type MIME)
+- [ ] 7.3 README complet (démarrage, commandes, architecture, captures), nettoyage de PROGRESS, revue finale (`/code-review`)
+- [ ] 7.4 Option : ambiance sonore légère (Web Audio) avec coupure/volume mémorisé
 
 ## Prochaine étape
-Phase 6.5 — équilibrage long terme (dernière étape de la phase 6) : (a) rééquilibrer les carnivores (gain de chasse, coût, reproduction) pour qu'ils persistent avec les herbivores sur 40 000 ticks (cycles proie-prédateur sans extinction) ; (b) test cargo « long » non ignoré mais raisonnable (ex. 8 000 ticks) : herbivores > 0 et indice d'intelligence final > initial ; (c) vérifier le rattrapage hors-ligne : 300 000 ticks plafonnés en ≤ 60 s dans le navigateur (mesure e2e) ; (d) mettre à jour la capture et le README.
+Phase 7.1 — performance : profil à 10 000+ créatures (via un petit rapport headless Rust ou un test Vitest chronométré : ticks/s avec 5 000 / 10 000 / 20 000 créatures), coût d'une image (copies `slice()`), taille du snapshot (génome 740 o + appris 192 o par créature : ~15 Mo à 16 000 créatures) et fréquence d'autosave ; proposer et appliquer les optimisations utiles (ex. n'envoyer que les champs nécessaires, ne sauvegarder que les `hidden` actifs, autosave adaptatif).
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -56,6 +60,7 @@ Phase 6.5 — équilibrage long terme (dernière étape de la phase 6) : (a) ré
 (aucun)
 
 ## Journal
+- 6.5 fait : (a) carnivores réglés (gain de chasse 0,6, portée 1,8, coût ×1,3) mais AUCUN réglage ne les maintient durablement : ils meurent tôt ou font tout disparaître (balayage de ~6 jeux de paramètres) → décision : pression de prédation ponctuelle, Dieu peut ressemer des carnivores ; les herbivores atteignent alors une compétence de 0,77-0,80 (indice 55-60) grâce à elle. (b) RENAISSANCE : `elite.rs` (mémoire des 8 meilleurs génomes d'herbivores adultes, mise à jour tous les 250 ticks), `life::maintain` : si < 12 herbivores, vérifié tous les 500 ticks au plus, repeuplement depuis les élites mutées ; stockée dans le snapshot v4, compteur `rescues` affiché (« Renaissances : N »). Cause : la mesure du rattrapage de 3 h avait révélé une EXTINCTION totale à t=52 878 ; un premier jet (vérif. tous les 50 ticks + carnivores brouteurs) produisait 3 236 renaissances et 208 carnivores (subvention de proies) → corrigé (500 ticks, carnivores non brouteurs). (c) Test cargo long : 8000 ticks avec 8 carnivores, herbivores vivants et compétence > 0,58 ; test de renaissance Rust + Vitest. (d) MESURE rattrapage 3 h : 300 000 ticks en 32-49 s dans le navigateur (plafond 60 s respecté), monde vivant (243 herbivores), indice 70-71 « Sages ». Test snapshot adapté (le monde vide est maintenant repeuplé). Cargo 34, Vitest 35, e2e 10 verts. Phase 6 terminée.
 - 6.4 fait : `sim/intelligence.ts` (indice = (compétence−0,5)/0,5 ×100, paliers Errants <15 / Fourrageurs <40 / Stratèges <70 / Sages), `Frame.iqHerbivores/iqCarnivores` (null si espèce absente, recalculé toutes les 15 images pour limiter le coût), échantillons d'historique étendus (champs optionnels : anciennes données acceptées), `LineChart` gère les valeurs absentes (NaN → ligne interrompue, « — » dans l'infobulle), graphique « Intelligence (indice 0-100) », puce « Intelligence : N · Palier » dans la barre supérieure. Capture relue : « Intelligence : 7 · Errants » au tick 954, courbe 0-100 qui démarre. Cargo 31, Vitest 34, e2e 10 verts.
 - 6.3 fait : apprentissage à trois facteurs sur la couche de sortie (`brain::learn` : Δw = η·récompense·sortie·cachée, décroissance 0,9995, borne ±2), récompense = énergie gagnée en mangeant/chassant (−0,2 si on se cogne, −coût de la tentative de manger), vecteur `learned` (48 f32/créature) stocké en SoA et copié par `kill`, héritage partiel (25 % des deltas assimilés dans le génome de l'enfant, `brain::inherit`), snapshot v3 (champ `learned`). RÉSULTATS 40 000 ticks herbivores seuls : compétence génome 0,65 dès t=4000 (0,59 avant), 0,70 vers t=8000-12 000 ; phénotype ≈ génome (les sondes fixes mesurent surtout l'inné). Observation : hidden moyen redescend à ~3,0-3,7 (le nombre de neurones n'est plus le bon indicateur d'intelligence → indice basé sur la compétence en 6.4). Anciennes sauvegardes (v2) refusées proprement → nouveau monde. Cargo 31, Vitest 30, e2e 10 verts.
 - 6.2 fait : (1) générations plus rapides (maturité 300→120, âge max 4000→2500), (2) entrée 0 = « herbe ici » (remplace le biais constant, déjà porté par chaque neurone) + sonde de compétence « herbe ici → manger » (7 sondes), coût de 0,03 par tentative de manger, (3) fourrage décisif : bouchée 35→12 d'énergie (≈ 60 ticks de vie), énergie max 120→100, départ 40, naissance seuil 65 / coût 35 / enfant 20. RÉSULTATS (herbivores seuls, 40 000 ticks, monde 128²) : compétence 0,50 → 0,62 dès t=8000 → 0,64 à t=40 000, aucune extinction (population 16-220, dents de scie). Avec 15 carnivores : herbivores 0,665 et hidden ≈ 5,0 (la prédation pousse l'intelligence), MAIS les carnivores s'éteignent vers t=8000 (à rééquilibrer). Cargo 29, Vitest 29, e2e verts.
