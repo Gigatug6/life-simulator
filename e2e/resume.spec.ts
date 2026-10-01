@@ -7,7 +7,7 @@ const openMenu = async (page: import('@playwright/test').Page) => {
 const tickOf = async (page: import('@playwright/test').Page) =>
   Number(/Tick : (\d+)/.exec((await page.getByTestId('ticks').textContent()) ?? '')?.[1])
 
-test('recharger la page reprend le même monde depuis le cache du navigateur', async ({ page }) => {
+test('reloading the page resumes the same world from the browser cache', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
   await page.getByRole('button', { name: '×16' }).click()
@@ -22,17 +22,17 @@ test('recharger la page reprend le même monde depuis le cache du navigateur', a
   await page.reload()
   await expect(page.getByTestId('status')).toContainText('Monde repris')
   await expect.poll(() => tickOf(page)).toBeGreaterThanOrEqual(before)
-  expect(await tickOf(page)).toBeLessThan(before + 200) // pas un nouveau monde à 0, ni un bond
+  expect(await tickOf(page)).toBeLessThan(before + 200) // not a new world at 0, nor a jump
 })
 
-test('un monde sauvegardé il y a longtemps est rattrapé en rafale à la reprise', async ({ page }) => {
+test('a world saved long ago is caught up in a burst on resume', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
   await page.getByRole('button', { name: 'Pause' }).click()
   await page.getByTestId('menu-toggle').click()
   await page.getByRole('menuitem', { name: 'Sauvegarder' }).click()
   await expect(page.getByTestId('saved')).toContainText('Sauvegardé à')
-  // vieillit la sauvegarde de 20 s (≈ 600 ticks à rattraper)
+  // ages the save by 20 s (≈ 600 ticks to catch up)
   await page.evaluate(async () => {
     const path = '/src/persist/store.ts'
     const { createSaveStore } = (await import(/* @vite-ignore */ path)) as typeof import('../src/persist/store')
@@ -42,11 +42,11 @@ test('un monde sauvegardé il y a longtemps est rattrapé en rafale à la repris
   })
   await page.reload()
   await expect(page.getByTestId('status')).toContainText('Monde repris')
-  // le monde a avancé d'au moins ~500 ticks sans que l'on ait attendu
+  // the world advanced by at least ~500 ticks without waiting
   await expect.poll(() => tickOf(page), { timeout: 20_000 }).toBeGreaterThan(500)
 })
 
-test('exporter, créer un nouveau monde puis réimporter le fichier retrouve le monde', async ({ page }) => {
+test('exporting, creating a new world then re-importing the file restores the world', async ({ page }) => {
   page.on('dialog', (d) => d.accept())
   await page.goto('/')
   await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
@@ -62,7 +62,7 @@ test('exporter, créer un nouveau monde puis réimporter le fichier retrouve le 
 
   await openMenu(page)
   await page.getByTestId('new-world').click()
-  // le monde est remplacé (la boîte de confirmation est traitée de façon asynchrone)
+  // the world is replaced (the confirmation dialog is handled asynchronously)
   await expect.poll(() => tickOf(page)).toBeLessThan(exportedTick)
 
   await openMenu(page)
@@ -72,17 +72,17 @@ test('exporter, créer un nouveau monde puis réimporter le fichier retrouve le 
   await expect(page.getByTestId('save-error')).toHaveCount(0)
 
   await openMenu(page)
-  // un fichier invalide est refusé sans casser le monde
+  // an invalid file is rejected without breaking the world
   await page.getByTestId('import-input').setInputFiles({ name: 'x.life', mimeType: 'application/octet-stream', buffer: Buffer.from('nimportequoi') })
   await expect(page.getByTestId('save-error')).toContainText('pas une sauvegarde valide')
 })
 
-test("deux démarrages simultanés ne créent qu'un seul monde actif", async ({ page }) => {
+test("two simultaneous starts create only one active world", async ({ page }) => {
   page.on('dialog', (d) => d.accept())
   await page.goto('/')
   await expect(page.getByTestId('population')).toContainText('herbivores')
   await openMenu(page)
-  // deux « Nouveau monde » dans la MÊME tâche JavaScript : les deux démarrages se chevauchent
+  // two "New world" clicks in the SAME JavaScript task: the two starts overlap
   await page.getByTestId('new-world').evaluate((el: HTMLElement) => {
     el.click()
     el.click()
@@ -90,7 +90,7 @@ test("deux démarrages simultanés ne créent qu'un seul monde actif", async ({ 
   await expect(page.getByTestId('population')).toContainText('herbivores')
   await page.getByRole('button', { name: 'Pause' }).click()
   await page.waitForTimeout(500)
-  // en pause, aucun worker « fantôme » ne doit encore faire avancer un monde
+  // while paused, no "ghost" worker must still advance a world
   const seen = new Set<number>()
   for (let i = 0; i < 8; i++) {
     seen.add(await tickOf(page))

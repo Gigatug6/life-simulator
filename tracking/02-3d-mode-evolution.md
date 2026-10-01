@@ -9,7 +9,7 @@ Demande de l'utilisateur : « ajouter un **mode 3D**, ajouter des **évolutions 
 ### S — Suivi
 - [x] S.1 Dossier `tracking/` (convention, index, modèle), ancien `PROGRESS.md` archivé, README et `CLAUDE.md` mis à jour
 
-- [ ] S.2 Demande utilisateur : noms de dossiers/fichiers et **commentaires de code en anglais** (dossier `suivi` renommé `tracking/`, traduction de tous les commentaires et titres de tests ; l'UI reste en français)
+- [x] S.2 Demande utilisateur : noms de dossiers/fichiers et **commentaires de code en anglais** (dossier `suivi` renommé `tracking/`, traduction de tous les commentaires et titres de tests ; l'UI reste en français)
 
 ### E — Évolution physique des créatures
 - [ ] E.1 Traits physiques héréditaires et mutables (taille, vitesse, vision, teinte de lignée) en Rust + snapshot v5 + inspecteur + rendu 2D
@@ -40,4 +40,5 @@ E.1 — traits physiques héréditaires.
 (à compléter)
 
 ## Journal
+- S.2 fait : `suivi/` → `tracking/` (+ fichiers `01-initial-simulator.md`, `02-3d-mode-evolution.md`, références mises à jour) ; règle de langue ajoutée à `CLAUDE.md` (code, commentaires, noms de dossiers/fichiers et titres de tests en anglais ; UI et docs en français). Tous les commentaires de code et messages de test passés en anglais : Rust (`wasm/src`), TypeScript/Vue (`src`), tests e2e, scripts, Makefile, Dockerfiles, Caddyfile, workflows GitHub (y compris leurs `name:`). Laissés en français volontairement : texte affiché à l'utilisateur (libellés d'UI, noms des paliers d'intelligence, messages d'erreur affichés) et les sélecteurs e2e qui visent ces textes. Les titres de tests e2e ayant changé, les filtres `-g` d'avant ne correspondent plus. Vérifié : cargo 35, Vitest 36, e2e 12, `make pages-check` verts.
 - S.1 fait : création de `tracking/` (README avec règles et index, `_modele.md`), `PROGRESS.md` → `tracking/01-initial-simulator.md` (déplacé avec `git mv`, historique conservé), fichier du chat n°2 créé.

@@ -1,20 +1,20 @@
 import { expect, test } from '@playwright/test'
 
-test("les courbes d'évolution se remplissent et survivent au rechargement", async ({ page }) => {
+test("the evolution charts fill up and survive a reload", async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('population')).toContainText('herbivores')
   await page.getByRole('button', { name: '×64' }).click()
   await expect(page.getByTestId('charts')).toBeVisible({ timeout: 30_000 })
   await expect.poll(async () => page.locator('[data-testid="chart-population"] path').first().getAttribute('d').then((d) => (d ?? '').split('L').length), { timeout: 30_000 }).toBeGreaterThan(5)
   await expect(page.getByTestId('chart-intelligence')).toBeVisible()
-  // indice d'intelligence dans la barre supérieure : valeur 0-100 et palier nommé
+  // intelligence index in the top bar: a 0-100 value and a named level
   await expect(page.getByTestId('iq')).toHaveText(/Intelligence : \d+ · (Errants|Fourrageurs|Stratèges|Sages)/)
-  // survol : infobulle
+  // hover: tooltip
   const svg = page.locator('[data-testid="chart-population"] svg')
   const box = (await svg.boundingBox())!
   await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5)
   await expect(page.locator('[data-testid="chart-population"] .tip')).toBeVisible()
-  // tableau accessible
+  // accessible table
   await page.getByRole('button', { name: 'Voir le tableau' }).first().click()
   await expect(page.locator('[data-testid="chart-population"] table')).toBeVisible()
   await page.screenshot({ path: 'artifacts/screens/charts.png' })

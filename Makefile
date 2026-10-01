@@ -1,31 +1,31 @@
-prod:       ## build de production (Caddy) sur http://localhost:8080
+prod:       ## production build (Caddy) on http://localhost:8080
 	docker compose --profile prod up -d --build web
 
-pages-check: ## teste le build GitHub Pages (sous-dossier /life-simulator/)
+pages-check: ## tests the GitHub Pages build (sub-folder /life-simulator/)
 	./scripts/pages-check.sh
 
-e2e-prod:   ## tests e2e sur le build de production
+e2e-prod:   ## e2e tests on the production build
 	./scripts/e2e-prod.sh
 
 .PHONY: prod pages-check e2e-prod init build install dev up down logs check typecheck test wasm wasm-test e2e sh npm clean
 
-init:       ## génère .env (UID/GID) et build les images
+init:       ## generates .env (UID/GID) and builds the images
 	./scripts/init-env.sh
 	docker compose build
 	docker compose --profile wasm build
 
 build: init
 
-install:    ## npm install dans Docker
+install:    ## npm install inside Docker
 	./scripts/npm.sh install
 
-wasm:       ## compile le moteur Rust -> src/sim/wasm/life.wasm
+wasm:       ## compiles the Rust engine -> src/sim/wasm/life.wasm
 	./scripts/wasm.sh build
 
-wasm-test:  ## cargo test dans Docker
+wasm-test:  ## cargo test inside Docker
 	./scripts/wasm.sh test
 
-dev:        ## serveur de dev (http://localhost:5173)
+dev:        ## dev server (http://localhost:5173)
 	./scripts/dev.sh
 
 up:

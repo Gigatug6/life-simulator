@@ -1,7 +1,7 @@
-# Publie le simulateur sur GitHub Pages à chaque push sur la branche principale (ou à la demande).
-# Réglage à faire UNE SEULE FOIS côté GitHub : Settings → Pages → Build and deployment → Source = « GitHub Actions ».
-# Le site est 100 % statique (aucune API) : tout est sauvegardé dans le navigateur des visiteurs.
-name: Déployer sur GitHub Pages
+# Publishes the simulator to GitHub Pages on every push to the main branch (or on demand).
+# One-time setting on the GitHub side: Settings → Pages → Build and deployment → Source = "GitHub Actions".
+# The site is 100 % static (no API): everything is saved in the visitors' browser.
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   pages: write
   id-token: write
 
-# une seule publication à la fois ; une plus récente remplace celle en cours
+# one publication at a time; a newer one replaces the one in progress
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -24,8 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Moteur de simulation : Rust -> WebAssembly (le .wasm n'est pas dans le dépôt)
-      - name: Tester et compiler le moteur Rust
+      # Simulation engine: Rust -> WebAssembly (the .wasm is not in the repository)
+      - name: Test and build the Rust engine
         run: |
           rustup target add wasm32-unknown-unknown
           cd wasm
@@ -43,8 +43,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-      # Adresse du site : https://<compte>.github.io/<dépôt>/ (ou la racine pour <compte>.github.io / domaine perso)
-      - name: Calculer l'adresse de publication
+      # Site address: https://<account>.github.io/<repo>/ (or the root for <account>.github.io / a custom domain)
+      - name: Compute the publication address
         id: site
         env:
           CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
@@ -60,9 +60,9 @@ jobs:
           fi
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
-          echo "Publication sur $URL (base $BASE)"
+          echo "Publishing to $URL (base $BASE)"
 
-      - name: Construire le site
+      - name: Build the site
         env:
           BASE_PATH: ${{ steps.site.outputs.base }}
         run: npm run build

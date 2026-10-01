@@ -1,4 +1,4 @@
-# Toolchain Rust pour compiler le moteur de simulation en WebAssembly (rien sur l'hôte).
+# Rust toolchain to compile the simulation engine to WebAssembly (nothing installed on the host).
 FROM rust:1-slim-bookworm
 ARG HOST_UID=1000
 ARG HOST_GID=1000

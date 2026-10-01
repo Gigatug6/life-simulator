@@ -2,14 +2,14 @@ import { expect, test } from '@playwright/test'
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
-test("l'interface tient sur un écran de téléphone et répond au toucher", async ({ page }) => {
+test("the interface fits on a phone screen and responds to touch", async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('population')).toContainText('herbivores')
-  // pas de défilement horizontal de la page
+  // no horizontal page scrolling
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   expect(overflow).toBeLessThanOrEqual(0)
 
-  // les courbes sont repliées par défaut sur mobile, le bouton les ouvre
+  // the charts are collapsed by default on mobile, the button opens them
   await expect(page.getByTestId('charts')).toHaveCount(0)
   await page.getByTestId('charts-toggle').tap()
   await page.getByRole('button', { name: '×64' }).tap()
@@ -17,7 +17,7 @@ test("l'interface tient sur un écran de téléphone et répond au toucher", asy
   await page.getByTestId('charts-toggle').tap()
   await expect(page.getByTestId('charts')).toHaveCount(0)
 
-  // la barre d'outils est utilisable : sélection + toucher sur le monde
+  // the toolbar is usable: selection + touch on the world
   await page.getByRole('button', { name: 'Pause' }).tap()
   const count = async () => Number(/Population : (\d+)/.exec((await page.getByTestId('population').textContent()) ?? '')?.[1])
   await page.waitForTimeout(300)

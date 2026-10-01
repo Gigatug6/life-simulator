@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('le moteur WASM tourne dans le worker et fait vivre des créatures', async ({ page }) => {
+test('the WASM engine runs in the worker and brings creatures to life', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('status')).toContainText('Moteur WASM prêt')
   await expect(page.getByTestId('population')).toContainText('herbivores')

@@ -1,7 +1,7 @@
 #!/bin/sh
-# Teste le build « GitHub Pages » : compile le moteur, construit le site avec une base de sous-dossier
-# (/<dépôt>/), le sert avec `vite preview` et lance Playwright dessus.
-# Usage : ./scripts/pages-check.sh [nom-du-depot]      (défaut : life-simulator)
+# Tests the "GitHub Pages" build: compiles the engine, builds the site with a sub-folder base
+# (/<repo>/), serves it with `vite preview` and runs Playwright against it.
+# Usage: ./scripts/pages-check.sh [repo-name]      (default: life-simulator)
 cd "$(dirname "$0")/.." || exit 1
 REPO="${1:-life-simulator}"
 ./scripts/wasm.sh build || exit 1
