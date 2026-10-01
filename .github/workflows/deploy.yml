@@ -31,6 +31,7 @@ jobs:
           cd wasm
           cargo test
           cargo build --release --target wasm32-unknown-unknown
+          mkdir -p ../src/sim/wasm
           cp target/wasm32-unknown-unknown/release/life_sim.wasm ../src/sim/wasm/life.wasm
 
       - uses: actions/setup-node@v4
