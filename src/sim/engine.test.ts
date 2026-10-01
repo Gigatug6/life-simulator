@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { Biome, ELITE_SLOTS, GENOME_LEN, LEARN_LEN, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
+import { Biome, ELITE_SLOTS, GENOME_LEN, LEARN_LEN, TRAIT_LEN, Trait, altitudeView, biomeView, creatureView, grassView, loadEngine } from './engine'
 
 const wasmPath = new URL('./wasm/life.wasm', import.meta.url)
 
@@ -60,16 +60,37 @@ describe.runIf(existsSync(wasmPath))('WASM engine', () => {
     expect(new Set(ids).size).toBe(2)
     expect(e.genome_len()).toBe(GENOME_LEN)
     expect(e.learn_len()).toBe(LEARN_LEN)
+    expect(e.trait_len()).toBe(TRAIT_LEN)
+    expect(creatureView(e, 'traits').length).toBe(2 * TRAIT_LEN)
+    // the traits follow the swapped creature too
+    const traits1 = creatureView(e, 'traits').slice(TRAIT_LEN)
     expect(creatureView(e, 'learned').length).toBe(2 * LEARN_LEN)
     expect(creatureView(e, 'genome').length).toBe(2 * GENOME_LEN)
     const g1 = creatureView(e, 'genome').slice(GENOME_LEN)
     e.creature_kill(0)
     expect(creatureView(e, 'genome')).toEqual(g1) // the genome follows the swapped creature
+    expect(creatureView(e, 'traits')).toEqual(traits1)
     expect(e.creature_count()).toBe(1)
     expect(creatureView(e, 'id')[0]).toBe(ids[1])
     expect(creatureView(e, 'x')[0]).toBe(3)
     e.world_init(1, 32, 32)
     expect(e.creature_count()).toBe(0)
+  })
+
+  it('gives founders a body plan close to the default and a random lineage hue', async () => {
+    const e = await loadEngine(readFileSync(wasmPath))
+    e.world_init(5, 64, 64)
+    e.world_populate(0, 100)
+    const t = creatureView(e, 'traits')
+    const hues = new Set<number>()
+    for (let i = 0; i < 100; i++) {
+      for (const k of [Trait.Size, Trait.Speed, Trait.Vision]) expect(Math.abs(t[i * TRAIT_LEN + k]! - 1)).toBeLessThanOrEqual(0.1 + 1e-6)
+      hues.add(Math.round(t[i * TRAIT_LEN + Trait.Hue]! * 20))
+    }
+    expect(hues.size).toBeGreaterThan(8) // hues are spread over the wheel
+    expect(e.stats_mean_trait(0, Trait.Size)).toBeCloseTo(1, 1)
+    expect(e.stats_mean_trait(1, Trait.Size)).toBe(0) // no carnivores
+    expect(e.stats_mean_trait(0, 9)).toBe(0) // invalid trait index
   })
 
   it('exposes per-species statistics', async () => {

@@ -18,6 +18,8 @@ test("the inspector shows a creature and its brain", async ({ page }) => {
   await page.mouse.click(cx, cy)
   await expect(page.getByTestId('inspector')).toBeVisible()
   await expect(page.getByTestId('inspector-hidden')).toHaveText('4')
+  // heritable body plan: size multiplier near 1 for a founder
+  await expect(page.getByTestId('inspector-size')).toHaveText(/×(0\.9\d|1\.0\d|1\.10)/)
   await expect(page.getByTestId('brain')).toBeVisible()
   await page.screenshot({ path: 'artifacts/screens/inspector.png' })
 

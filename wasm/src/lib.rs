@@ -15,6 +15,7 @@ pub mod life;
 pub mod plants;
 pub mod rng;
 pub mod spatial;
+pub mod traits;
 pub mod world;
 
 static mut TICKS: u32 = 0;
@@ -163,7 +164,12 @@ pub extern "C" fn creature_spawn(x: f32, y: f32, species: u32) -> i32 {
         brain::random_genome(&mut genome, rng);
         let angle = rng.next_f32() * 6.2831855;
         match c.spawn(x, y, angle, 50.0, species as u8, 0, &genome) {
-            Some(i) => i as i32,
+            Some(i) => {
+                let mut t = [0.0f32; traits::TRAIT_LEN];
+                traits::random_founder(&mut t, rng);
+                c.set_traits(i, &t);
+                i as i32
+            }
             None => -1,
         }
     }
@@ -236,14 +242,37 @@ pub extern "C" fn world_populate(species: u32, count: u32) -> u32 {
                 let mut genome = [0.0f32; brain::GENOME_LEN];
                 brain::random_genome(&mut genome, rng);
                 let angle = rng.next_f32() * 6.2831855;
-                if c.spawn(x, y, angle, 50.0, species as u8, 0, &genome).is_none() {
+                let Some(i) = c.spawn(x, y, angle, 50.0, species as u8, 0, &genome) else {
                     break;
-                }
+                };
+                let mut t = [0.0f32; traits::TRAIT_LEN];
+                traits::random_founder(&mut t, rng);
+                c.set_traits(i, &t);
                 made += 1;
             }
         }
         made
     }
+}
+
+/// Number of f32 physical traits per creature (size, speed, vision, hue).
+#[no_mangle]
+pub extern "C" fn trait_len() -> u32 {
+    traits::TRAIT_LEN as u32
+}
+
+#[no_mangle]
+pub extern "C" fn creature_traits_ptr() -> *const f32 {
+    unsafe { core::ptr::addr_of!(CREATURES.traits) as *const f32 }
+}
+
+/// Mean value of physical trait `k` (0 size, 1 speed, 2 vision, 3 hue) of a species; 0 if absent.
+#[no_mangle]
+pub extern "C" fn stats_mean_trait(species: u32, k: u32) -> f32 {
+    if k as usize >= traits::TRAIT_LEN {
+        return 0.0;
+    }
+    unsafe { life::mean_trait(&*core::ptr::addr_of!(CREATURES), species as u8, k as usize) }
 }
 
 /// Mean behavioural competence of a species, 0..1 (0.5 = random) — see `brain::competence`.

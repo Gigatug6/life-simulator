@@ -111,6 +111,10 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     expect(s.x).toBe(f.x[3])
     expect(s.genome.length).toBe(185)
     expect(s.hidden).toBe(4) // initial genome: 4 hidden neurons
+    expect(s.traits.size).toBeCloseTo(f.size[3]!)
+    expect(s.traits.hue).toBeCloseTo(f.hue[3]!)
+    expect(f.size.length).toBe(f.count)
+    expect(f.hue.length).toBe(f.count)
     const brain = describeBrain(s.genome)
     expect(brain.hidden).toBe(4)
     expect(brain.w1.length).toBe(4)

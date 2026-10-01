@@ -41,6 +41,8 @@ export interface Inspected {
   species: number
   hidden: number
   genome: Float32Array
+  /** Heritable physical traits: size, speed and vision multipliers (around 1) and the lineage hue (0..1). */
+  traits: { size: number; speed: number; vision: number; hue: number }
 }
 
 /** Frame sent to the UI (buffers are transferred, never shared). */
@@ -63,6 +65,10 @@ export interface Frame {
   angle: Float32Array
   energy: Float32Array
   species: Uint8Array
+  /** Body-size multiplier per creature (around 1). */
+  size: Float32Array
+  /** Lineage hue per creature (0..1). */
+  hue: Float32Array
   id: Uint32Array
   /** Followed creature, or null if nothing is selected / it is dead. */
   selected: Inspected | null

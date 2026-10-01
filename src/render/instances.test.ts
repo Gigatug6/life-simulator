@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { creatureSize, writeInstances } from './instances'
+import { lineageRgb } from './creatureColor'
 
 describe('writeInstances', () => {
   it('places the creatures (y flipped) and colours by species and energy', () => {
     const m = new Float32Array(32)
     const c = new Float32Array(6)
     writeInstances(2, new Float32Array([10, 20]), new Float32Array([5, 6]), new Float32Array([0, Math.PI / 2]),
-      new Float32Array([120, 10]), new Uint8Array([0, 1]), 10, m, c)
+      new Float32Array([120, 10]), new Uint8Array([0, 1]), new Float32Array([1, 1]), new Float32Array([0.5, 0.5]), 10, m, c)
     expect([m[12], m[13]]).toEqual([10, -5])
     expect([m[16 + 12], m[16 + 13]]).toEqual([20, -6])
     const s = creatureSize(10)
@@ -15,6 +16,26 @@ describe('writeInstances', () => {
     expect(c[0]).toBeGreaterThan(c[2]!) // herbivore: yellow/orange
     expect(c[3]).toBeGreaterThan(c[4]!) // carnivore: red
     expect(c[3]).toBeLessThan(c[0]!) // less energy = darker (and red < yellow)
+  })
+
+  it('scales the body with the size gene and tints it with the lineage hue', () => {
+    const m = new Float32Array(32)
+    const c = new Float32Array(6)
+    writeInstances(2, new Float32Array([1, 2]), new Float32Array([1, 2]), new Float32Array([0, 0]),
+      new Float32Array([50, 50]), new Uint8Array([0, 0]), new Float32Array([1, 1.5]), new Float32Array([0.1, 0.9]), 10, m, c)
+    expect(m[16]!).toBeCloseTo(m[0]! * 1.5) // the bigger creature is drawn bigger
+    // different lineage hues give clearly different colours within the same species
+    expect(Math.abs(c[0]! - c[3]!) + Math.abs(c[1]! - c[4]!) + Math.abs(c[2]! - c[5]!)).toBeGreaterThan(0.2)
+  })
+
+  it('keeps species distinguishable whatever the lineage hue', () => {
+    for (let h = 0; h <= 1; h += 0.1) {
+      const [hr, hg] = lineageRgb(0, h) // herbivore: never red-dominant (green channel carries it)
+      const [cr, cg] = lineageRgb(1, h) // carnivore: red channel dominates green
+      expect(hg).toBeGreaterThan(0.3)
+      expect(cr).toBeGreaterThan(cg)
+      expect(hr).toBeGreaterThan(0)
+    }
   })
 
   it('keeps a readable minimum size when zoomed out', () => {

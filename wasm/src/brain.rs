@@ -33,16 +33,11 @@ pub fn hidden_count(genome: &[f32]) -> usize {
     h.clamp(HID_MIN as i32, HID_MAX as i32) as usize
 }
 
-/// Approximate Gaussian (Irwin-Hall, 4 draws), standard deviation ~1.
-fn gauss(rng: &mut Rng) -> f32 {
-    let s = rng.next_f32() + rng.next_f32() + rng.next_f32() + rng.next_f32();
-    (s - 2.0) * 1.732
-}
 
 /// Random starting genome (small structure).
 pub fn random_genome(genome: &mut [f32], rng: &mut Rng) {
     for g in genome[..HID_GENE].iter_mut() {
-        *g = gauss(rng) * 0.5;
+        *g = rng.gauss() * 0.5;
     }
     genome[HID_GENE] = HID_MIN as f32 + 1.0;
 }
@@ -139,7 +134,7 @@ pub fn mutate(child: &mut [f32], parent: &[f32], rng: &mut Rng, rate: f32, sigma
     child[..GENOME_LEN].copy_from_slice(&parent[..GENOME_LEN]);
     for g in child[..HID_GENE].iter_mut() {
         if rng.next_f32() < rate {
-            *g += gauss(rng) * sigma;
+            *g += rng.gauss() * sigma;
         }
     }
     let r = rng.next_f32();

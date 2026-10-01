@@ -1,8 +1,8 @@
 /** Fills the creature instance buffers (4×4 matrices + colours). Pure, testable. */
 
+import { lineageRgb } from './creatureColor'
+
 export const MAX_ENERGY = 100 // mirror of life::MAX_ENERGY
-const HERB: [number, number, number] = [1.0, 0.82, 0.25]
-const CARN: [number, number, number] = [1.0, 0.2, 0.18]
 
 /** Size in cells: never smaller than ~4 px on screen. */
 export const creatureSize = (zoom: number) => Math.max(1.1, 4 / zoom)
@@ -14,12 +14,15 @@ export function writeInstances(
   angle: Float32Array,
   energy: Float32Array,
   species: Uint8Array,
+  size: Float32Array,
+  hue: Float32Array,
   zoom: number,
   matrices: Float32Array,
   colors: Float32Array,
 ) {
-  const s = creatureSize(zoom)
+  const base = creatureSize(zoom)
   for (let i = 0; i < n; i++) {
+    const s = base * size[i]! // heritable body size
     // the world y axis points down: in the scene, y and the angle are flipped
     const a = -angle[i]!
     const c = Math.cos(a) * s
@@ -41,10 +44,11 @@ export function writeInstances(
     matrices[m + 13] = -y[i]!
     matrices[m + 14] = 0.1
     matrices[m + 15] = 1
-    const base = species[i] === 1 ? CARN : HERB
-    const k = 0.45 + 0.55 * Math.min(1, Math.max(0, energy[i]! / MAX_ENERGY))
-    colors[i * 3] = base[0] * k
-    colors[i * 3 + 1] = base[1] * k
-    colors[i * 3 + 2] = base[2] * k
+    const [r, g, b] = lineageRgb(species[i]!, hue[i]!)
+    // brightness follows the energy relative to this body's own capacity (bigger bodies store more)
+    const k = 0.45 + 0.55 * Math.min(1, Math.max(0, energy[i]! / (MAX_ENERGY * size[i]!)))
+    colors[i * 3] = r * k
+    colors[i * 3 + 1] = g * k
+    colors[i * 3 + 2] = b * k
   }
 }

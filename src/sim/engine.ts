@@ -34,6 +34,9 @@ export interface LifeExports {
   creature_genome_ptr(): number
   genome_len(): number
   learn_len(): number
+  trait_len(): number
+  creature_traits_ptr(): number
+  stats_mean_trait(species: number, k: number): number
   world_rescues(): number
   elite_count(): number
   elite_slots(): number
@@ -79,6 +82,10 @@ export function grassView(e: LifeExports): Float32Array {
 export const GENOME_LEN = 185
 /** Learned deltas per creature (mirror of brain::LEARN_LEN). */
 export const LEARN_LEN = 48
+/** Physical traits per creature (mirror of traits::TRAIT_LEN). */
+export const TRAIT_LEN = 4
+/** Indices of the physical traits (mirror of wasm/src/traits.rs). */
+export const Trait = { Size: 0, Speed: 1, Vision: 2, Hue: 3 } as const
 /** Slots of the elite memory (mirror of elite::ELITES). */
 export const ELITE_SLOTS = 8
 
@@ -94,6 +101,7 @@ export const CREATURE_FIELDS = [
   { name: 'species', size: 1, ptr: 'creature_species_ptr', ctor: Uint8Array },
   { name: 'genome', size: GENOME_LEN * 4, ptr: 'creature_genome_ptr', ctor: Float32Array },
   { name: 'learned', size: LEARN_LEN * 4, ptr: 'creature_learned_ptr', ctor: Float32Array },
+  { name: 'traits', size: TRAIT_LEN * 4, ptr: 'creature_traits_ptr', ctor: Float32Array },
 ] as const
 
 export type CreatureField = (typeof CREATURE_FIELDS)[number]['name']
@@ -110,6 +118,7 @@ interface CreatureViews {
   species: Uint8Array
   genome: Float32Array
   learned: Float32Array
+  traits: Float32Array
 }
 
 export function creatureView<K extends CreatureField>(e: LifeExports, name: K): CreatureViews[K] {

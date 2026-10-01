@@ -1,5 +1,6 @@
 //! SoA storage for creatures (dense arrays, removal by swapping with the last one).
 use crate::brain::{GENOME_LEN, LEARN_LEN};
+use crate::traits::{self, TRAIT_LEN};
 
 pub const MAX: usize = 20_000;
 
@@ -23,6 +24,8 @@ pub struct Creatures {
     pub genome: [f32; MAX * GENOME_LEN],
     /// Deltas learned during life (output layer), LEARN_LEN f32 per creature.
     pub learned: [f32; MAX * LEARN_LEN],
+    /// Physical traits (size, speed, vision, hue), TRAIT_LEN f32 per creature.
+    pub traits: [f32; MAX * TRAIT_LEN],
 }
 
 impl Creatures {
@@ -40,6 +43,7 @@ impl Creatures {
             species: [0; MAX],
             genome: [0.0; MAX * GENOME_LEN],
             learned: [0.0; MAX * LEARN_LEN],
+            traits: [0.0; MAX * TRAIT_LEN],
         }
     }
 
@@ -65,8 +69,14 @@ impl Creatures {
         self.species[i] = species;
         self.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN].copy_from_slice(&genome[..GENOME_LEN]);
         self.learned[i * LEARN_LEN..(i + 1) * LEARN_LEN].fill(0.0);
+        self.traits[i * TRAIT_LEN..(i + 1) * TRAIT_LEN].copy_from_slice(&traits::DEFAULT);
         self.count += 1;
         Some(i)
+    }
+
+    /// Overwrites the physical traits of creature `i`.
+    pub fn set_traits(&mut self, i: usize, t: &[f32]) {
+        self.traits[i * TRAIT_LEN..(i + 1) * TRAIT_LEN].copy_from_slice(&t[..TRAIT_LEN]);
     }
 
     /// Removes creature `i`: the last one takes its place (indices are not stable, ids are).
@@ -86,6 +96,7 @@ impl Creatures {
             self.species[i] = self.species[last];
             self.genome.copy_within(last * GENOME_LEN..(last + 1) * GENOME_LEN, i * GENOME_LEN);
             self.learned.copy_within(last * LEARN_LEN..(last + 1) * LEARN_LEN, i * LEARN_LEN);
+            self.traits.copy_within(last * TRAIT_LEN..(last + 1) * TRAIT_LEN, i * TRAIT_LEN);
         }
         self.count = last;
     }
@@ -133,6 +144,14 @@ mod tests {
         d.learned[LEARN_LEN] = 0.75; // creature 1
         d.kill(0);
         assert_eq!(d.learned[0], 0.75);
+        // traits follow the swapped creature too, and new creatures start with the default body plan
+        assert_eq!(d.traits[0], traits::DEFAULT[0]);
+        let mut e = boxed();
+        e.spawn(0.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
+        e.spawn(1.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
+        e.set_traits(1, &[1.4, 0.7, 1.2, 0.25]);
+        e.kill(0);
+        assert_eq!(&e.traits[..TRAIT_LEN], &[1.4, 0.7, 1.2, 0.25]);
         c.kill(10); // out of bounds: ignored
         assert_eq!(c.count, 2);
     }

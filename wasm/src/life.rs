@@ -4,6 +4,7 @@ use crate::creatures::{Creatures, CARNIVORE, HERBIVORE};
 use crate::elite::Elites;
 use crate::rng::Rng;
 use crate::spatial::SpatialHash;
+use crate::traits::{self, TRAIT_LEN};
 use crate::world::DEEP_WATER;
 
 pub const MAX_AGE: u32 = 2500;
@@ -96,7 +97,7 @@ pub fn bless(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     for i in 0..c.count {
         let (dx, dy) = (c.x[i] - x, c.y[i] - y);
         if dx * dx + dy * dy <= r2 {
-            c.energy[i] = MAX_ENERGY;
+            c.energy[i] = MAX_ENERGY * c.traits[i * TRAIT_LEN + traits::SIZE];
             n += 1;
         }
     }
@@ -131,6 +132,18 @@ pub fn mean_hidden(c: &Creatures, species: u8) -> f32 {
     for i in 0..c.count {
         if c.species[i] == species {
             sum += brain::hidden_count(&c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN]) as f32;
+            n += 1;
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
+/// Mean value of physical trait `k` (see `traits.rs`) over a species; 0 if the species is absent.
+pub fn mean_trait(c: &Creatures, species: u8, k: usize) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            sum += c.traits[i * TRAIT_LEN + k];
             n += 1;
         }
     }
@@ -204,9 +217,12 @@ pub fn maintain(c: &mut Creatures, elites: &mut Elites, env: &Env, rng: &mut Rng
             None => brain::random_genome(&mut genome, rng),
         }
         let ang = rng.next_f32() * 2.0 * PI;
-        if c.spawn(x, y, ang, START_ENERGY, HERBIVORE, 0, &genome).is_none() {
+        let Some(k) = c.spawn(x, y, ang, START_ENERGY, HERBIVORE, 0, &genome) else {
             break;
-        }
+        };
+        let mut founder = [0.0f32; TRAIT_LEN];
+        traits::random_founder(&mut founder, rng);
+        c.set_traits(k, &founder);
         born += 1;
     }
     if born > 0 {
@@ -225,6 +241,11 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
     for i in 0..n {
         let g = i * GENOME_LEN;
         let (x, y, a) = (c.x[i], c.y[i], c.angle[i]);
+        // physical traits of this creature (see traits.rs for the trade-offs)
+        let tr = i * TRAIT_LEN;
+        let (size, speed_gene, vision) = (c.traits[tr + traits::SIZE], c.traits[tr + traits::SPEED], c.traits[tr + traits::VISION]);
+        let look = LOOK * vision;
+        let max_energy = MAX_ENERGY * size; // a bigger body stores more
 
         // --- perception ---
         let mut input = [0.0f32; IN];
@@ -232,9 +253,9 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         if let Some(cell) = env.cell(x, y) {
             input[0] = env.grass[cell];
         }
-        input[1] = c.energy[i] / MAX_ENERGY;
+        input[1] = c.energy[i] / max_energy;
         for (k, off) in [-0.6f32, 0.0, 0.6].iter().enumerate() {
-            let (sx, sy) = (x + cos(a + off) * LOOK, y + sin(a + off) * LOOK);
+            let (sx, sy) = (x + cos(a + off) * look, y + sin(a + off) * look);
             if c.species[i] == CARNIVORE {
                 let mut prey = 0u32;
                 grid.query(&c.x, &c.y, sx, sy, 4.0, |j, _| {
@@ -256,7 +277,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         // --- decision ---
         let l = i * LEARN_LEN;
         let (out, hid) = brain::forward_learn(&c.genome[g..g + GENOME_LEN], &c.learned[l..l + LEARN_LEN], &input);
-        let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED;
+        let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED * speed_gene;
         let na = a + out[1] * 0.35;
         let (nx, ny) = (x + cos(na) * speed, y + sin(na) * speed);
         c.angle[i] = na;
@@ -273,16 +294,18 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         // --- metabolism ---
         let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
         let base = if c.species[i] == CARNIVORE { BASE_COST * 1.3 } else { BASE_COST };
-        c.energy[i] -= base + moved * moved * 0.12 + nh * BRAIN_COST;
+        // upkeep grows with body size, long sight costs extra, and moving costs more for bigger / faster bodies
+        c.energy[i] -= base * traits::upkeep(size) + base * 0.3 * (vision - 1.0) + moved * moved * 0.12 * size + nh * BRAIN_COST;
 
         // --- eating (herbivores) ---
         if out[2] > 0.0 && c.species[i] == HERBIVORE {
             c.energy[i] -= EAT_COST;
             reward -= EAT_COST;
             if let Some(cell) = env.cell(c.x[i], c.y[i]) {
-                let bite = if env.grass[cell] < EAT_BITE { env.grass[cell] } else { EAT_BITE };
+                let max_bite = EAT_BITE * size; // bigger mouths take bigger bites
+                let bite = if env.grass[cell] < max_bite { env.grass[cell] } else { max_bite };
                 env.grass[cell] -= bite;
-                c.energy[i] = (c.energy[i] + bite * EAT_GAIN).min(MAX_ENERGY);
+                c.energy[i] = (c.energy[i] + bite * EAT_GAIN).min(max_energy);
                 reward += bite * EAT_GAIN / 3.0;
             }
         }
@@ -290,13 +313,13 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         // --- hunting (carnivores): strikes the nearest living prey ---
         if out[2] > 0.0 && c.species[i] == CARNIVORE {
             let mut best: Option<(usize, f32)> = None;
-            grid.query(&c.x, &c.y, c.x[i], c.y[i], STRIKE_RANGE, |j, d2| {
+            grid.query(&c.x, &c.y, c.x[i], c.y[i], STRIKE_RANGE + 0.5 * (size - 1.0), |j, d2| {
                 if c.species[j] == HERBIVORE && c.energy[j] > 0.0 && best.map_or(true, |(_, bd)| d2 < bd) {
                     best = Some((j, d2));
                 }
             });
             if let Some((j, _)) = best {
-                c.energy[i] = (c.energy[i] + c.energy[j] * KILL_GAIN).min(MAX_ENERGY);
+                c.energy[i] = (c.energy[i] + c.energy[j] * KILL_GAIN).min(max_energy);
                 reward += (c.energy[j] * KILL_GAIN / 10.0).min(2.0);
                 c.energy[j] = 0.0;
             }
@@ -310,8 +333,8 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         }
 
         // --- reproduction ---
-        if out[3] > 0.0 && c.age[i] >= MATURITY && c.energy[i] > BIRTH_THRESHOLD && c.count < crate::creatures::MAX {
-            c.energy[i] -= BIRTH_COST;
+        if out[3] > 0.0 && c.age[i] >= MATURITY && c.energy[i] > BIRTH_THRESHOLD * size && c.count < crate::creatures::MAX {
+            c.energy[i] -= BIRTH_COST * size;
             let mut child = [0.0f32; GENOME_LEN];
             brain::mutate(&mut child, &c.genome[g..g + GENOME_LEN], rng, MUT_RATE, MUT_SIGMA);
             brain::inherit(&mut child, &c.learned[l..l + LEARN_LEN]);
@@ -320,7 +343,11 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             let (cx, cy) = if env.blocked(cx, cy) { (c.x[i], c.y[i]) } else { (cx, cy) };
             let gen = c.generation[i].saturating_add(1);
             let sp = c.species[i];
-            c.spawn(cx, cy, ang, CHILD_ENERGY, sp, gen, &child);
+            let mut child_traits = [0.0f32; TRAIT_LEN];
+            traits::mutate(&mut child_traits, &c.traits[tr..tr + TRAIT_LEN], rng);
+            if let Some(k) = c.spawn(cx, cy, ang, CHILD_ENERGY * size, sp, gen, &child) {
+                c.set_traits(k, &child_traits);
+            }
         }
     }
     // --- death (descending pass: the swapped-in last creature was already processed) ---
@@ -390,6 +417,60 @@ mod tests {
             step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
             maintain(&mut s.c, &mut s.elites, &env, &mut s.rng, t + 1);
         }
+    }
+
+    #[test]
+    fn bigger_bodies_burn_more_and_far_sight_costs_extra() {
+        // identical blank brains, no food at all: only the body plan differs
+        let mut s = sim(6, 0);
+        s.grass.iter_mut().for_each(|g| *g = 0.0);
+        let blank = [0.0f32; GENOME_LEN];
+        let plans: [[f32; TRAIT_LEN]; 4] = [
+            [1.0, 1.0, 1.0, 0.5], // reference
+            [1.6, 1.0, 1.0, 0.5], // big
+            [0.6, 1.0, 1.0, 0.5], // small
+            [1.0, 1.0, 1.8, 0.5], // far sight
+        ];
+        for (k, p) in plans.iter().enumerate() {
+            let i = s.c.spawn(20.0 + 15.0 * k as f32, 60.0, 0.0, 40.0, HERBIVORE, 0, &blank).unwrap();
+            s.c.set_traits(i, p);
+        }
+        let ids: Vec<u32> = (0..4).map(|i| s.c.id[i]).collect();
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        for _ in 0..100 {
+            step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        }
+        let energy = |id: u32| (0..s.c.count).find(|&i| s.c.id[i] == id).map(|i| s.c.energy[i]).unwrap();
+        let (reference, big, small, sighted) = (energy(ids[0]), energy(ids[1]), energy(ids[2]), energy(ids[3]));
+        assert!(big < reference, "a bigger body must burn more: {} vs {}", big, reference);
+        assert!(small > reference, "a smaller body must burn less: {} vs {}", small, reference);
+        assert!(sighted < reference, "far sight must cost extra: {} vs {}", sighted, reference);
+    }
+
+    #[test]
+    fn newborns_inherit_the_parents_body_plan_with_small_mutations() {
+        let mut s = sim(7, 0);
+        // a parent whose brain always wants to reproduce (output 3 bias strongly positive) and is rich
+        let mut g = [0.0f32; GENOME_LEN];
+        g[GENOME_LEN - 1] = 4.0; // hidden units
+        let b2 = GENOME_LEN - 1 - brain::OUT; // start of b2
+        g[b2 + 3] = 6.0;
+        let p = s.c.spawn(60.0, 60.0, 0.0, 95.0, HERBIVORE, 0, &g).unwrap();
+        s.c.set_traits(p, &[1.3, 0.8, 1.5, 0.2]);
+        s.c.age[p] = 500;
+        for cell in s.biome.iter_mut() {
+            *cell = world::PLAIN;
+        }
+        let mut env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
+        step(&mut s.c, &mut s.grid, &mut env, &mut s.rng);
+        assert_eq!(s.c.count, 2, "the parent must have given birth");
+        let c = 1;
+        assert_eq!(s.c.generation[c], 1);
+        let t = &s.c.traits[c * TRAIT_LEN..(c + 1) * TRAIT_LEN];
+        assert!((t[traits::SIZE] - 1.3).abs() < 0.3 && (t[traits::SPEED] - 0.8).abs() < 0.3 && (t[traits::VISION] - 1.5).abs() < 0.4);
+        assert!((t[traits::HUE] - 0.2).abs() < 0.2, "lineage hue stays close: {}", t[traits::HUE]);
+        // the child's starting energy scales with the parent's size
+        assert!((s.c.energy[c] - CHILD_ENERGY * 1.3).abs() < 1e-3, "{}", s.c.energy[c]);
     }
 
     #[test]

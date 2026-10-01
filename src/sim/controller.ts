@@ -1,5 +1,5 @@
 /** Drives the WASM engine (loop, speed, frames). Independent of the Worker so it stays testable. */
-import { GENOME_LEN, biomeView, creatureView, grassView, type LifeExports } from './engine'
+import { GENOME_LEN, TRAIT_LEN, Trait, biomeView, creatureView, grassView, type LifeExports } from './engine'
 import { hiddenCount } from './brain'
 import { intelligenceIndex } from './intelligence'
 import { restoreSnapshot, takeSnapshot } from './snapshot'
@@ -107,6 +107,12 @@ export class SimController {
       species: creatureView(e, 'species')[i]!,
       hidden: hiddenCount(genome),
       genome,
+      traits: {
+        size: creatureView(e, 'traits')[i * TRAIT_LEN + Trait.Size]!,
+        speed: creatureView(e, 'traits')[i * TRAIT_LEN + Trait.Speed]!,
+        vision: creatureView(e, 'traits')[i * TRAIT_LEN + Trait.Vision]!,
+        hue: creatureView(e, 'traits')[i * TRAIT_LEN + Trait.Hue]!,
+      },
     }
   }
 
@@ -132,10 +138,21 @@ export class SimController {
       angle: creatureView(e, 'angle').slice(),
       energy: creatureView(e, 'energy').slice(),
       species: creatureView(e, 'species').slice(),
+      size: this.traitColumn(Trait.Size),
+      hue: this.traitColumn(Trait.Hue),
       id: creatureView(e, 'id').slice(),
       selected: this.inspect(),
       grass: withGrass ? grassView(e).slice() : null,
     }
+  }
+
+  /** One physical trait of every creature, as a flat array (the traits are stored interleaved). */
+  private traitColumn(k: number): Float32Array {
+    const t = creatureView(this.engine, 'traits')
+    const n = this.engine.creature_count()
+    const out = new Float32Array(n)
+    for (let i = 0; i < n; i++) out[i] = t[i * TRAIT_LEN + k]!
+    return out
   }
 
   private computeIq() {

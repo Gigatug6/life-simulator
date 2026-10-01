@@ -22,6 +22,11 @@ impl Rng {
     pub fn next_f32(&mut self) -> f32 {
         (self.next_u32() >> 8) as f32 / 16_777_216.0
     }
+    /// Approximate Gaussian (Irwin-Hall, 4 draws), standard deviation ~1.
+    pub fn gauss(&mut self) -> f32 {
+        let s = self.next_f32() + self.next_f32() + self.next_f32() + self.next_f32();
+        (s - 2.0) * 1.732
+    }
 }
 
 /// Integer hash -> [0,1) for value noise.
