@@ -4,6 +4,27 @@ import { lineageRgb } from './creatureColor'
 
 export const MAX_ENERGY = 100 // mirror of life::MAX_ENERGY
 
+/**
+ * Writes the colour of creature `i` into `colors[i*3..]`: lineage hue, brightness following the energy
+ * relative to the body's own capacity, washed out towards white while the creature glows.
+ */
+export function writeCreatureColor(
+  colors: Float32Array,
+  i: number,
+  species: number,
+  hue: number,
+  energy: number,
+  size: number,
+  signal: number,
+) {
+  const [r, g, b] = lineageRgb(species, hue)
+  const k = 0.45 + 0.55 * Math.min(1, Math.max(0, energy / (MAX_ENERGY * size)))
+  const glow = signal * 0.75
+  colors[i * 3] = r * k + (1 - r * k) * glow
+  colors[i * 3 + 1] = g * k + (1 - g * k) * glow
+  colors[i * 3 + 2] = b * k + (1 - b * k) * glow
+}
+
 /** Size in cells: never smaller than ~4 px on screen. */
 export const creatureSize = (zoom: number) => Math.max(1.1, 4 / zoom)
 
@@ -46,13 +67,6 @@ export function writeInstances(
     matrices[m + 13] = -y[i]!
     matrices[m + 14] = 0.1
     matrices[m + 15] = 1
-    const [r, g, b] = lineageRgb(species[i]!, hue[i]!)
-    // brightness follows the energy relative to this body's own capacity (bigger bodies store more)
-    const k = 0.45 + 0.55 * Math.min(1, Math.max(0, energy[i]! / (MAX_ENERGY * size[i]!)))
-    // light signal: the colour washes out towards white-hot as the creature glows
-    const glow = signal[i]! * 0.75
-    colors[i * 3] = r * k + (1 - r * k) * glow
-    colors[i * 3 + 1] = g * k + (1 - g * k) * glow
-    colors[i * 3 + 2] = b * k + (1 - b * k) * glow
+    writeCreatureColor(colors, i, species[i]!, hue[i]!, energy[i]!, size[i]!, signal[i]!)
   }
 }

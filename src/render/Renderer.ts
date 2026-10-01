@@ -3,11 +3,12 @@ import { ViewState } from './view'
 import { terrainColor } from './terrainColor'
 import { writeInstances } from './instances'
 import type { Frame } from '../sim/protocol'
+import type { WorldRenderer } from './types'
 
 const MAX_CREATURES = 20000 // mirror of creatures::MAX
 
 /** Top-down 2D renderer. No dependency on Vue: data comes in through methods. */
-export class Renderer {
+export class Renderer implements WorldRenderer {
   readonly view = new ViewState()
   private renderer: THREE.WebGLRenderer
   private scene = new THREE.Scene()
@@ -64,8 +65,12 @@ export class Renderer {
     loop()
   }
 
-  /** Sets the terrain (once per world). */
-  setTerrain(w: number, h: number, biome: Uint8Array) {
+  get pixelsPerCell() {
+    return this.view.zoom
+  }
+
+  /** Sets the terrain (once per world). The 2D view ignores the altitude. */
+  setTerrain(w: number, h: number, biome: Uint8Array, _altitude?: Float32Array) {
     this.disposeTerrain()
     this.w = w
     this.h = h

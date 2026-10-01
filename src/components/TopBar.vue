@@ -42,6 +42,9 @@ function onNewWorld() {
       </button>
     </span>
     <span class="grow"></span>
+    <button :class="{ on: ui.mode === '3d' }" data-testid="mode-toggle" :title="ui.mode === '3d' ? 'Revenir à la vue du dessus' : 'Passer en vue 3D'" @click="ui.toggleMode()">
+      {{ ui.mode === '3d' ? 'Vue 2D' : 'Vue 3D' }}
+    </button>
     <button :class="{ on: ui.chartsOpen }" data-testid="charts-toggle" @click="ui.toggleCharts()">Courbes</button>
     <button :class="{ on: ui.menuOpen }" data-testid="menu-toggle" aria-haspopup="true" :aria-expanded="ui.menuOpen" @click="ui.menuOpen = !ui.menuOpen">Menu</button>
 

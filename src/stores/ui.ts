@@ -3,6 +3,13 @@ import { ref } from 'vue'
 
 /** Display preferences (open/closed panels), remembered in the browser. */
 export const useUiStore = defineStore('ui', () => {
+  function readMode(): '2d' | '3d' {
+    try {
+      return localStorage.getItem('life-simulator:ui:mode') === '3d' ? '3d' : '2d'
+    } catch {
+      return '2d'
+    }
+  }
   const read = (k: string, d: boolean) => {
     try {
       const v = localStorage.getItem(`life-simulator:ui:${k}`)
@@ -13,6 +20,8 @@ export const useUiStore = defineStore('ui', () => {
   }
   const wide = typeof window !== 'undefined' && window.innerWidth >= 900
   const chartsOpen = ref(read('charts', wide))
+  /** Which world view is shown: the flat top-down view or the 3D view. */
+  const mode = ref<'2d' | '3d'>(readMode())
   const menuOpen = ref(false)
 
   function toggleCharts() {
@@ -24,5 +33,14 @@ export const useUiStore = defineStore('ui', () => {
     }
   }
 
-  return { chartsOpen, menuOpen, toggleCharts }
+  function toggleMode() {
+    mode.value = mode.value === '3d' ? '2d' : '3d'
+    try {
+      localStorage.setItem('life-simulator:ui:mode', mode.value)
+    } catch {
+      /* non-critical preference */
+    }
+  }
+
+  return { chartsOpen, menuOpen, mode, toggleCharts, toggleMode }
 })

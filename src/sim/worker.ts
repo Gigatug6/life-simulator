@@ -45,7 +45,7 @@ self.onmessage = async (e: MessageEvent<ToWorker>) => {
       if (restored && msg.elapsedMs && msg.elapsedMs > 5000) sim.beginCatchup(msg.elapsedMs)
       post({ type: 'ready', version: engine.version(), restored })
       const t = sim.terrain()
-      post({ type: 'terrain', ...t }, [t.biome.buffer])
+      post({ type: 'terrain', ...t }, [t.biome.buffer, t.altitude.buffer])
       loop()
     } else if (!sim) {
       return

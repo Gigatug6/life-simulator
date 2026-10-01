@@ -88,6 +88,6 @@ export type FromWorker =
   | { type: 'ready'; version: number; restored: boolean }
   | { type: 'catchup'; done: number; total: number; finished: boolean }
   | { type: 'snapshot'; data: Uint8Array; meta: { tick: number; seed: number } }
-  | { type: 'terrain'; w: number; h: number; biome: Uint8Array }
+  | { type: 'terrain'; w: number; h: number; biome: Uint8Array; altitude: Float32Array }
   | { type: 'frame'; frame: Frame; ticksPerSecond: number }
   | { type: 'error'; message: string }

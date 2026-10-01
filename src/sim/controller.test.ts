@@ -17,6 +17,8 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     const sim = await make()
     const t = sim.terrain()
     expect(t.biome.length).toBe(128 * 128)
+    expect(t.altitude.length).toBe(128 * 128) // the 3D view needs the relief
+    expect(t.altitude.every((v) => v >= 0 && v <= 1)).toBe(true)
     const f = sim.frame()
     expect(f.herbivores).toBe(150)
     expect(f.carnivores).toBe(10)

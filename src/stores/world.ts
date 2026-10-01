@@ -13,7 +13,9 @@ export const useWorldStore = defineStore('world', () => {
   const speed = ref<Speed>(1)
   const ticksPerSecond = ref(0)
   const frame = shallowRef<Frame | null>(null)
-  const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array } | null>(null)
+  const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array; altitude: Float32Array } | null>(null)
+  /** Latest grass layer (the frames only carry it now and then); renderers created later start from it. */
+  const grass = shallowRef<Float32Array | null>(null)
   const selectedId = ref<number | null>(null)
   const lastSelected = shallowRef<Inspected | null>(null)
   const history = shallowRef<Sample[]>([])
@@ -58,6 +60,7 @@ export const useWorldStore = defineStore('world', () => {
     const gen = ++startGen
     status.value = 'Chargement du moteur…'
     frame.value = null
+    grass.value = null
     selectedId.value = null
     lastSelected.value = null
     catchup.value = null
@@ -100,6 +103,7 @@ export const useWorldStore = defineStore('world', () => {
       } else if (m.type === 'terrain') terrain.value = markRaw(m)
       else if (m.type === 'frame') {
         frame.value = markRaw(m.frame)
+        if (m.frame.grass) grass.value = markRaw(m.frame.grass)
         const fr = m.frame
         if (hist.push({ tick: fr.tick, herbivores: fr.herbivores, carnivores: fr.carnivores, hiddenHerbivores: fr.hiddenHerbivores, hiddenCarnivores: fr.hiddenCarnivores, iqHerbivores: fr.iqHerbivores, iqCarnivores: fr.iqCarnivores, body: fr.bodyHerbivores, kinds: fr.kindsHerbivores })) {
           history.value = hist.points.slice()
@@ -176,6 +180,7 @@ export const useWorldStore = defineStore('world', () => {
     forgetHistory(worldSeed)
     savedAt.value = null
     frame.value = null
+    grass.value = null
     await start()
   }
 
@@ -221,7 +226,7 @@ export const useWorldStore = defineStore('world', () => {
   }
 
   return {
-    status, ready, history, speed, ticksPerSecond, frame, terrain, restored, catchup, savedAt, saveError, persistent,
+    status, ready, history, speed, ticksPerSecond, frame, terrain, grass, restored, catchup, savedAt, saveError, persistent,
     selectedId, lastSelected, pick, select,
     start, stop, setSpeed, save, exportFile, importFile, newWorld,
     skipCatchup: () => send({ type: 'skipCatchup' }),

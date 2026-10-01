@@ -1,5 +1,5 @@
 /** Drives the WASM engine (loop, speed, frames). Independent of the Worker so it stays testable. */
-import { GENOME_LEN, TRAIT_LEN, Trait, biomeView, creatureView, grassView, type LifeExports } from './engine'
+import { GENOME_LEN, TRAIT_LEN, Trait, altitudeView, biomeView, creatureView, grassView, type LifeExports } from './engine'
 import { hiddenCount } from './brain'
 import { intelligenceIndex } from './intelligence'
 import { restoreSnapshot, takeSnapshot } from './snapshot'
@@ -79,9 +79,14 @@ export class SimController {
     return { data: takeSnapshot(this.engine), meta: { tick: this.engine.world_tick(), seed: this.engine.world_seed() >>> 0 } }
   }
 
-  /** Copy of the biomes (sent once to the UI). */
+  /** Copy of the biomes and altitudes (sent once to the UI; the 3D view needs the relief). */
   terrain() {
-    return { w: this.engine.world_width(), h: this.engine.world_height(), biome: biomeView(this.engine).slice() }
+    return {
+      w: this.engine.world_width(),
+      h: this.engine.world_height(),
+      biome: biomeView(this.engine).slice(),
+      altitude: altitudeView(this.engine).slice(),
+    }
   }
 
   /** Runs up to `speed` ticks without exceeding `budgetMs`; returns the number of ticks done. */
