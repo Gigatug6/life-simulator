@@ -425,13 +425,15 @@ export class Renderer3D implements WorldRenderer {
       this.cleanup.push(() => c.removeEventListener(t, fn as EventListener))
     }
     on('pointerdown', (e) => {
-      this.down = { x: e.clientX, y: e.clientY, t: performance.now() }
+      // event.timeStamp is when the input happened, not when this handler ran: a busy main thread
+      // (software WebGL, slow device) must not turn a quick click into a "long press"
+      this.down = { x: e.clientX, y: e.clientY, t: e.timeStamp }
     })
     on('pointerup', (e) => {
       const d = this.down
       this.down = null
       if (!d || !this.terrainMesh) return
-      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5 || performance.now() - d.t > 400) return
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 5 || e.timeStamp - d.t > 400) return
       const r = c.getBoundingClientRect()
       const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
       this.raycaster.setFromCamera(ndc, this.camera)

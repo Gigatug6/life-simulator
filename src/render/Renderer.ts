@@ -192,7 +192,7 @@ export class Renderer implements WorldRenderer {
       c.setPointerCapture(e.pointerId)
       this.pointers.set(e.pointerId, local(e))
       this.pinchDist = this.pointerDistance()
-      this.downAt = this.pointers.size === 1 ? { ...local(e), t: performance.now() } : null
+      this.downAt = this.pointers.size === 1 ? { ...local(e), t: e.timeStamp } : null // event time, not handler time: robust when the main thread is busy
     })
     on('pointermove', (e) => {
       const prev = this.pointers.get(e.pointerId)
@@ -214,7 +214,7 @@ export class Renderer implements WorldRenderer {
       const d = this.downAt
       if (d && e.type === 'pointerup' && this.pointers.size === 1) {
         const p = local(e)
-        if (Math.hypot(p.x - d.x, p.y - d.y) < 5 && performance.now() - d.t < 400) {
+        if (Math.hypot(p.x - d.x, p.y - d.y) < 5 && e.timeStamp - d.t < 400) {
           const w = this.view.screenToWorld(p.x, p.y)
           this.onWorldClick?.(w.x, w.y)
         }
