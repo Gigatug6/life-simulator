@@ -5,6 +5,9 @@ export interface Sample {
   carnivores: number
   hiddenHerbivores: number
   hiddenCarnivores: number
+  /** Indice d'intelligence 0-100 (null : espèce absente ou donnée antérieure à son introduction). */
+  iqHerbivores?: number | null
+  iqCarnivores?: number | null
 }
 
 export const MAX_POINTS = 600

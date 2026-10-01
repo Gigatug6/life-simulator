@@ -3,11 +3,14 @@ import { computed } from 'vue'
 import { useWorldStore } from '../stores/world'
 import { useUiStore } from '../stores/ui'
 import { SPEEDS } from '../sim/protocol'
+import { levelOf } from '../sim/intelligence'
 
 const world = useWorldStore()
 const ui = useUiStore()
 const SEASONS = ['Printemps', 'Été', 'Automne', 'Hiver']
 const f = computed(() => world.frame)
+// intelligence du monde : celle des herbivores (espèce de base), à défaut des carnivores
+const iq = computed(() => f.value?.iqHerbivores ?? f.value?.iqCarnivores ?? null)
 
 function onImport(e: Event) {
   const input = e.target as HTMLInputElement
@@ -29,6 +32,7 @@ function onNewWorld() {
     <strong class="brand">Simulateur de vie</strong>
     <template v-if="f">
       <span class="chip" data-testid="ticks">Tick : {{ f.tick }} · {{ SEASONS[f.season] }} · {{ f.daylight > 0.5 ? 'jour' : 'nuit' }}</span>
+      <span v-if="iq !== null" class="chip" data-testid="iq" title="Compétence comportementale moyenne : 0 = hasard, 100 = parfaite">Intelligence : {{ Math.round(iq) }} · {{ levelOf(iq).name }}</span>
       <span class="chip" data-testid="population">Population : {{ f.count }} (herbivores {{ f.herbivores }}, carnivores {{ f.carnivores }})</span>
     </template>
     <span class="speeds" role="group" aria-label="Vitesse">
@@ -51,7 +55,7 @@ function onNewWorld() {
         <input type="file" accept=".life" data-testid="import-input" hidden @change="onImport" />
       </label>
       <button role="menuitem" class="danger" data-testid="new-world" @click="onNewWorld">Nouveau monde</button>
-      <p v-if="f" class="small">Cerveau moyen {{ f.hiddenHerbivores.toFixed(2) }} neurones · {{ Math.round(world.ticksPerSecond) }} ticks/s</p>
+      <p v-if="f" class="small">Cerveau moyen {{ f.hiddenHerbivores.toFixed(1) }} neurones cachés · {{ Math.round(world.ticksPerSecond) }} ticks/s</p>
     </div>
     <span class="status" data-testid="status">{{ world.status }}</span>
   </header>

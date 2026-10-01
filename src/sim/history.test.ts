@@ -40,4 +40,11 @@ describe('History', () => {
     h.pruneAfter(150)
     expect(h.points.map((p) => p.tick)).toEqual([0, 60, 120])
   })
+
+  it("accepte les anciens échantillons sans indice d'intelligence", () => {
+    const old = { tick: 0, herbivores: 1, carnivores: 0, hiddenHerbivores: 4, hiddenCarnivores: 0 }
+    const h = History.fromJSON({ every: 60, points: [old, { ...old, tick: 60, iqHerbivores: 12.5, iqCarnivores: null }] })
+    expect(h.points.length).toBe(2)
+    expect(h.points[1]!.iqHerbivores).toBe(12.5)
+  })
 })

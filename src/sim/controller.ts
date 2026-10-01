@@ -1,15 +1,18 @@
 /** Pilote le moteur WASM (boucle, vitesse, images). Indépendant du Worker pour rester testable. */
 import { GENOME_LEN, biomeView, creatureView, grassView, type LifeExports } from './engine'
 import { hiddenCount } from './brain'
+import { intelligenceIndex } from './intelligence'
 import { restoreSnapshot, takeSnapshot } from './snapshot'
 import { CATCHUP_MAX_MS, CATCHUP_MAX_TICKS, TICK_RATE, type Frame, type Speed } from './protocol'
 
 export const GRASS_EVERY = 10 // une image sur N embarque l'herbe
+export const IQ_EVERY = 15 // l'indice d'intelligence (coûteux) n'est recalculé que toutes les N images
 
 export class SimController {
   speed: Speed = 1
   selectedId: number | null = null
   private frames = 0
+  private iq: { herb: number | null; carn: number | null } = { herb: null, carn: null }
   private catchup: { total: number; done: number; startedAt: number; maxMs: number } | null = null
 
   constructor(readonly engine: LifeExports) {}
@@ -110,6 +113,7 @@ export class SimController {
   /** Image courante (copies : les vues WASM seraient invalidées si la mémoire grandit). */
   frame(): Frame {
     const e = this.engine
+    if (this.frames % IQ_EVERY === 0) this.iq = this.computeIq()
     const withGrass = this.frames++ % GRASS_EVERY === 0
     return {
       tick: e.world_tick(),
@@ -120,6 +124,8 @@ export class SimController {
       carnivores: e.stats_count(1),
       hiddenHerbivores: e.stats_mean_hidden(0),
       hiddenCarnivores: e.stats_mean_hidden(1),
+      iqHerbivores: this.iq.herb,
+      iqCarnivores: this.iq.carn,
       x: creatureView(e, 'x').slice(),
       y: creatureView(e, 'y').slice(),
       angle: creatureView(e, 'angle').slice(),
@@ -129,6 +135,12 @@ export class SimController {
       selected: this.inspect(),
       grass: withGrass ? grassView(e).slice() : null,
     }
+  }
+
+  private computeIq() {
+    const e = this.engine
+    const of = (species: number) => (e.stats_count(species) > 0 ? intelligenceIndex(e.stats_competence(species)) : null)
+    return { herb: of(0), carn: of(1) }
   }
 
   spawn(x: number, y: number, species: number, count: number) {

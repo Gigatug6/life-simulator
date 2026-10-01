@@ -15,17 +15,20 @@ const SERIES_POP = computed(() => [
   { name: 'Herbivores', color: HERB, values: pts.value.map((p) => p.herbivores) },
   { name: 'Carnivores', color: CARN, values: pts.value.map((p) => p.carnivores) },
 ])
-const SERIES_IQ = computed(() => [
-  { name: 'Herbivores', color: HERB, values: pts.value.map((p) => p.hiddenHerbivores) },
-  { name: 'Carnivores', color: CARN, values: pts.value.map((p) => p.hiddenCarnivores) },
-])
+// indice d'intelligence 0-100 ; NaN = espèce absente (ligne interrompue)
+const iq = (v: number | null | undefined) => (typeof v === 'number' ? v : NaN)
+const SERIES_IQ = computed(() => {
+  const list = [{ name: 'Herbivores', color: HERB, values: pts.value.map((p) => iq(p.iqHerbivores)) }]
+  const carn = pts.value.map((p) => iq(p.iqCarnivores))
+  if (carn.some(Number.isFinite)) list.push({ name: 'Carnivores', color: CARN, values: carn })
+  return list
+})
 </script>
 
 <template>
   <section v-if="xs.length > 1" class="charts" data-testid="charts" aria-label="Évolution du monde">
-    <!-- axe y de l'intelligence : neurones cachés moyens (3 à 12) -->
     <LineChart title="Population" :xs="xs" :series="SERIES_POP" :x-format="when" test-id="chart-population" />
-    <LineChart title="Intelligence moyenne" :xs="xs" :series="SERIES_IQ" :domain="[3, 12]" :format="(v) => v.toFixed(1)" :x-format="when" test-id="chart-intelligence" />
+    <LineChart title="Intelligence (indice 0-100)" :xs="xs" :series="SERIES_IQ" :domain="[0, 100]" :format="(v) => String(Math.round(v))" :x-format="when" test-id="chart-intelligence" />
   </section>
 </template>
 

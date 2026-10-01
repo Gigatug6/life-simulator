@@ -7,6 +7,8 @@ test("les courbes d'évolution se remplissent et survivent au rechargement", asy
   await expect(page.getByTestId('charts')).toBeVisible({ timeout: 30_000 })
   await expect.poll(async () => page.locator('[data-testid="chart-population"] path').first().getAttribute('d').then((d) => (d ?? '').split('L').length), { timeout: 30_000 }).toBeGreaterThan(5)
   await expect(page.getByTestId('chart-intelligence')).toBeVisible()
+  // indice d'intelligence dans la barre supérieure : valeur 0-100 et palier nommé
+  await expect(page.getByTestId('iq')).toHaveText(/Intelligence : \d+ · (Errants|Fourrageurs|Stratèges|Sages)/)
   // survol : infobulle
   const svg = page.locator('[data-testid="chart-population"] svg')
   const box = (await svg.boundingBox())!

@@ -53,6 +53,9 @@ export interface Frame {
   carnivores: number
   hiddenHerbivores: number
   hiddenCarnivores: number
+  /** Indice d'intelligence 0-100 par espèce (null si l'espèce est absente). */
+  iqHerbivores: number | null
+  iqCarnivores: number | null
   x: Float32Array
   y: Float32Array
   angle: Float32Array

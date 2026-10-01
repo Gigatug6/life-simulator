@@ -130,4 +130,17 @@ describe.runIf(existsSync(wasmPath))('SimController', () => {
     expect(learned.some((v) => v !== 0)).toBe(true)
     expect(learned.every((v) => Math.abs(v) <= 2)).toBe(true)
   })
+
+  it("fournit un indice d'intelligence 0-100 (null si l'espèce est absente)", async () => {
+    const sim = await make()
+    const f = sim.frame()
+    expect(f.iqHerbivores).not.toBeNull()
+    expect(f.iqHerbivores!).toBeGreaterThanOrEqual(0)
+    expect(f.iqHerbivores!).toBeLessThanOrEqual(100)
+    expect(f.iqCarnivores).not.toBeNull()
+    sim.engine.world_init(5, 64, 64)
+    sim.engine.world_populate(0, 20)
+    const g = new SimController(sim.engine).frame()
+    expect(g.iqCarnivores).toBeNull()
+  })
 })

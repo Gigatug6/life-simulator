@@ -21,12 +21,12 @@ const props = defineProps<{
 const W = 300
 const H = 110
 const M = { l: 34, r: 8, t: 8, b: 18 }
-const fmt = (v: number) => (props.format ? props.format(v) : String(Math.round(v)))
+const fmt = (v: number) => (!Number.isFinite(v) ? '—' : props.format ? props.format(v) : String(Math.round(v)))
 const xfmt = (x: number) => (props.xFormat ? props.xFormat(x) : String(x))
 
 const yDomain = computed<[number, number]>(() => {
   if (props.domain) return props.domain
-  const max = Math.max(1, ...props.series.flatMap((s) => s.values))
+  const max = Math.max(1, ...props.series.flatMap((s) => s.values).filter(Number.isFinite))
   return [0, niceMax(max)]
 })
 function niceMax(v: number) {
@@ -47,8 +47,9 @@ const yTicks = computed(() => {
 const paths = computed(() =>
   props.series.map((s) => ({
     ...s,
-    d: s.values.map((v, i) => `${i ? 'L' : 'M'}${sx(props.xs[i]!).toFixed(1)},${sy(v).toFixed(1)}`).join(''),
-    last: s.values.length ? { x: sx(props.xs[props.xs.length - 1]!), y: sy(s.values[s.values.length - 1]!), v: s.values[s.values.length - 1]! } : null,
+    // les valeurs absentes (NaN : espèce disparue) interrompent la ligne
+    d: s.values.map((v, i) => (Number.isFinite(v) ? `${i > 0 && Number.isFinite(s.values[i - 1]!) ? 'L' : 'M'}${sx(props.xs[i]!).toFixed(1)},${sy(v).toFixed(1)}` : '')).join(''),
+    last: s.values.length && Number.isFinite(s.values[s.values.length - 1]!) ? { x: sx(props.xs[props.xs.length - 1]!), y: sy(s.values[s.values.length - 1]!), v: s.values[s.values.length - 1]! } : null,
   })),
 )
 
@@ -101,7 +102,9 @@ const tableRows = computed(() => props.xs.map((x, i) => ({ x, vals: props.series
         </g>
         <g v-if="tip">
           <line :x1="tip.x" :x2="tip.x" :y1="M.t" :y2="H - M.b" class="cross" />
-          <circle v-for="(p, k) in paths" :key="'h' + k" :cx="tip.x" :cy="sy(p.values[hover!]!)" r="3.5" :fill="p.color" class="ring" />
+          <template v-for="(p, k) in paths" :key="'h' + k">
+            <circle v-if="Number.isFinite(p.values[hover!]!)" :cx="tip.x" :cy="sy(p.values[hover!]!)" r="3.5" :fill="p.color" class="ring" />
+          </template>
         </g>
       </svg>
       <div v-if="tip" class="tip" :style="tip.left ? { right: `${(1 - tip.x / W) * 100 + 2}%` } : { left: `${(tip.x / W) * 100 + 2}%` }">
