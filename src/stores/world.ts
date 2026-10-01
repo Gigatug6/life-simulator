@@ -25,6 +25,7 @@ export const useWorldStore = defineStore('world', () => {
   const saveError = ref<string | null>(null)
   const persistent = ref(false)
   let worker: Worker | null = null
+  let startGen = 0 // numéro du dernier démarrage : un démarrage plus ancien encore en attente s'abandonne
   let saveStore: SaveStore | null = null
   let pendingExport = false
   let pendingImport = false
@@ -54,6 +55,7 @@ export const useWorldStore = defineStore('world', () => {
 
   async function start(seed = Math.floor(Math.random() * 2 ** 32), w = 256, h = 256) {
     stop()
+    const gen = ++startGen
     status.value = 'Chargement du moteur…'
     frame.value = null
     selectedId.value = null
@@ -76,6 +78,7 @@ export const useWorldStore = defineStore('world', () => {
     } catch (err) {
       saveError.value = `Lecture de la sauvegarde impossible : ${err}`
     }
+    if (gen !== startGen) return // un autre démarrage (ou un arrêt) a eu lieu pendant la lecture de la sauvegarde
     // historique des courbes : repris pour le même monde, tronqué à l'instant de la sauvegarde
     hist = snapshot ? loadHistory(worldSeed) : new History()
     hist.pruneAfter(savedTick)
@@ -177,6 +180,7 @@ export const useWorldStore = defineStore('world', () => {
   }
 
   function stop() {
+    startGen++ // annule un démarrage en attente
     if (autosave) clearTimeout(autosave)
     autosave = null
     document.removeEventListener('visibilitychange', onHidden)

@@ -76,3 +76,25 @@ test('exporter, créer un nouveau monde puis réimporter le fichier retrouve le 
   await page.getByTestId('import-input').setInputFiles({ name: 'x.life', mimeType: 'application/octet-stream', buffer: Buffer.from('nimportequoi') })
   await expect(page.getByTestId('save-error')).toContainText('pas une sauvegarde valide')
 })
+
+test("deux démarrages simultanés ne créent qu'un seul monde actif", async ({ page }) => {
+  page.on('dialog', (d) => d.accept())
+  await page.goto('/')
+  await expect(page.getByTestId('population')).toContainText('herbivores')
+  await openMenu(page)
+  // deux « Nouveau monde » dans la MÊME tâche JavaScript : les deux démarrages se chevauchent
+  await page.getByTestId('new-world').evaluate((el: HTMLElement) => {
+    el.click()
+    el.click()
+  })
+  await expect(page.getByTestId('population')).toContainText('herbivores')
+  await page.getByRole('button', { name: 'Pause' }).click()
+  await page.waitForTimeout(500)
+  // en pause, aucun worker « fantôme » ne doit encore faire avancer un monde
+  const seen = new Set<number>()
+  for (let i = 0; i < 8; i++) {
+    seen.add(await tickOf(page))
+    await page.waitForTimeout(120)
+  }
+  expect([...seen].length).toBe(1)
+})

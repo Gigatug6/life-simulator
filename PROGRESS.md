@@ -1,7 +1,7 @@
 # PROGRESS — Simulateur de vie
 
 ## Statut
-- Phase courante : 7 — Finitions (7.3 en cours : README fait, revue de code lancée)
+- Phase courante : terminée (phases 0 à 7.3) — reste l'option 7.4 (audio), non demandée
 - Commandes : `make init`, `make install`, `make wasm`, `make check`, `make dev`, `make e2e`
 
 ## Checklist
@@ -45,11 +45,19 @@
 ### Phase 7 — Finitions
 - [x] 7.1 Performance : profil à 10 000+ créatures (ticks/s, coût du rendu, taille des snapshots → compresser les génomes inutilisés ou sauvegarder moins souvent), rapport chiffré
 - [x] 7.2 Build de production statique (`make prod` : Vite build + Caddy ou `dist/` seul), test que `dist/` fonctionne sans serveur de dev (WASM servi avec le bon type MIME)
-- [ ] 7.3 README complet (démarrage, commandes, architecture, captures), nettoyage de PROGRESS, revue finale (`/code-review`)
-- [ ] 7.4 Option : ambiance sonore légère (Web Audio) avec coupure/volume mémorisé
+- [x] 7.3 README complet (démarrage, commandes, architecture, captures), nettoyage de PROGRESS, revue finale (`/code-review`)
+- [ ] 7.4 Option (non demandée, non faite) : ambiance sonore légère (Web Audio) avec coupure/volume mémorisé
 
 ## Prochaine étape
-Phase 7.3 — documentation et revue : README complet (démarrage `make init install dev`, commandes, architecture en schéma, mode d'emploi du « Dieu », captures `artifacts/screens`), mise en ordre de PROGRESS (statut, décisions, limites connues), puis revue de code (`/code-review`) : corriger les vrais problèmes trouvés.
+Aucune étape obligatoire restante. Pistes (voir « Limites connues ») : carnivores durables, audio d'ambiance (7.4), mesure du rendu sur un vrai GPU, apprentissage plus riche (couches cachées).
+
+## Limites connues
+- **Carnivores** : aucun des ~6 jeux de paramètres essayés ne les maintient durablement (ils s'éteignent tôt ou font disparaître les herbivores). Ils servent de pression ponctuelle que Dieu peut ressemer ; ils n'ont pas de capteur de danger côté herbivores (la fuite ne peut pas émerger).
+- **Intelligence** : mesurée par une compétence comportementale (sondes fixes), pas par le nombre de neurones (qui reste ~4 et peut baisser).
+- **Rendu** : jamais mesuré sur un GPU réel (tests en rendu logiciel swiftshader).
+- **Sauvegarde** : `pagehide` est « au mieux » (aller-retour worker→thread principal) ; autosave de 10 à 60 s sinon. Snapshot ~1 Ko par créature (10 Mo pour 10 000). Anciennes versions de snapshot refusées (nouveau monde).
+- **Revue de code** : `/code-review` n'a examiné que le dernier commit (pas de branche de comparaison) → aucun constat ; une relecture manuelle ciblée a trouvé un vrai défaut (deux workers si `start()` est appelé deux fois en même temps), corrigé avec un test e2e qui échoue sans le correctif.
+- La vitesse/pause d'avant un rechargement n'est pas mémorisée (reprise en ×1).
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -60,6 +68,7 @@ Phase 7.3 — documentation et revue : README complet (démarrage `make init ins
 (aucun)
 
 ## Journal
+- 7.3 fait : README complet ; revue : `/code-review medium wasm/src src` → 0 constat mais périmètre limité au dernier commit (déclaré honnêtement). Relecture manuelle des zones à risque (restauration de snapshot forgé, démarrages concurrents, sauvegarde pendant rattrapage) : UN défaut réel corrigé — `start()` appelé deux fois en même temps créait deux workers (le premier « fantôme » continuait de faire avancer un monde). Correctif : compteur de génération `startGen` (stop() et start() invalident un démarrage en attente). Test e2e `deux démarrages simultanés` vérifié des deux côtés (échoue sans correctif : 8 ticks distincts en pause ; passe avec). Un premier jet du test passait aussi sans correctif (clics trop espacés) → réécrit. Cargo 35, Vitest 36, e2e 11, e2e prod 6 verts.
 - 7.3 (partiel) : README complet réécrit (démarrage, commandes, jeu, apprentissage, architecture, performances). Revue de code `/code-review medium wasm/src src` lancée en arrière-plan ; ses constats seront traités puis la case 7.3 cochée.
 - 7.2 fait : `docker/Dockerfile.prod` (3 étapes : Rust→WASM, Vite build, Caddy), `docker/Caddyfile` (zstd/gzip, cache immuable sur /assets, page en no-cache, MIME `application/wasm` vérifié), service `web` (profil `prod`, port 8080), `make prod`, `make e2e-prod` (`scripts/e2e-prod.sh` : 6 specs sans import `/src`, tous verts sur le build servi). TROUVAILLE : le .wasm pesait 19 Mo (structure des créatures initialisée avec `next_id: 1` non nul → 19 Mo de zéros dans la section data) → champ `issued` à 0 (prochain id = issued+1, format de snapshot inchangé) : 19 Mo → 28 Ko. Cargo 35, Vitest 36, e2e dev 10 + prod 6 verts. Les serveurs dev (5173) et prod (8080) restent lancés.
 - 7.1 fait : MESURES (natif opt 3, `cargo test perf_report -- --ignored --nocapture`) avant → après optimisation du comptage de voisins (`SpatialHash::count_up_to`, arrêt à 11) : 2 000 créatures 1165→1839 ticks/s ; 5 000 : 280→718 ; 10 000 : 83→332 ; 20 000 : 23→149 ticks/s (coût par créature 2,15→0,33 µs, désormais linéaire). Côté JS (Vitest `perf.test.ts`, 10 000 créatures, WASM sous Node) : tick 3,6 ms, image 0,2-3 ms, snapshot 10,2 Mo en 3,2 ms, restauration 5,4 ms (budgets assertés : tick < 40 ms, image < 40 ms, snapshot < 300 ms). Sauvegarde automatique adaptative (10 s, ≈ 2 s par Mo, max 60 s ; pas d'écritures IndexedDB empilées). Le rendu (InstancedMesh 20 000) n'a pas été mesuré en GPU réel (swiftshader en e2e). Cargo 35, Vitest 36, e2e 10 verts.
