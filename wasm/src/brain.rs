@@ -69,6 +69,31 @@ pub fn forward(genome: &[f32], input: &[f32; IN]) -> [f32; OUT] {
     out
 }
 
+/// Compétence comportementale d'un génome, dans [0, 1] (0,5 = indifférent / aléatoire).
+/// On soumet le cerveau à des situations types et on mesure s'il réagit « intelligemment » :
+/// tourner vers la nourriture, avancer vers elle, ne pas foncer dans un obstacle, s'en détourner.
+/// Sorties : [0] avancer (>0 = rapide), [1] tourner (<0 = vers la gauche, >0 = vers la droite).
+pub fn competence(genome: &[f32]) -> f32 {
+    const BASE: [f32; IN] = [1.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5];
+    // (entrée activée, sortie observée, signe attendu)
+    const PROBES: [(usize, usize, f32); 6] = [
+        (2, 1, -1.0), // nourriture à gauche -> tourner à gauche
+        (4, 1, 1.0),  // nourriture à droite -> tourner à droite
+        (3, 0, 1.0),  // nourriture devant -> avancer
+        (6, 0, -1.0), // obstacle devant -> ralentir
+        (5, 1, 1.0),  // obstacle à gauche -> s'écarter vers la droite
+        (7, 1, -1.0), // obstacle à droite -> s'écarter vers la gauche
+    ];
+    let mut total = 0.0;
+    for (input, output, sign) in PROBES {
+        let mut x = BASE;
+        x[input] = 1.0;
+        let out = forward(genome, &x)[output];
+        total += (1.0 + sign * out) * 0.5;
+    }
+    total / PROBES.len() as f32
+}
+
 /// Copie `parent` dans `child` puis mute : bruit gaussien sur les poids (probabilité `rate`,
 /// écart `sigma`) et, rarement, ±1 unité cachée (croissance un peu plus probable que la perte).
 pub fn mutate(child: &mut [f32], parent: &[f32], rng: &mut Rng, rate: f32, sigma: f32) {
@@ -137,6 +162,31 @@ mod tests {
         assert_eq!(forward(&g, &inp), before);
         g[HID_GENE] = HID_MAX as f32; // activer ces unités change la sortie
         assert_ne!(forward(&g, &inp), before);
+    }
+
+    #[test]
+    fn competence_is_neutral_for_blank_brain_and_high_for_a_wired_one() {
+        let mut g = vec![0.0; GENOME_LEN];
+        g[HID_GENE] = 4.0;
+        assert!((competence(&g) - 0.5).abs() < 1e-6);
+        // neurone 0 lit « nourriture à gauche », neurone 1 « nourriture à droite »
+        g[W1 + 2] = 4.0;
+        g[W1 + IN + 4] = 4.0;
+        g[W2 + HID_MAX] = -4.0; // sortie « tourner » : −h0
+        g[W2 + HID_MAX + 1] = 4.0; // + h1
+        let c = competence(&g);
+        assert!(c > 0.7, "{}", c);
+        // aléatoire : proche de 0,5 en moyenne
+        let mut rng = Rng::new(5);
+        let mean: f32 = (0..400)
+            .map(|_| {
+                let mut r = vec![0.0; GENOME_LEN];
+                random_genome(&mut r, &mut rng);
+                competence(&r)
+            })
+            .sum::<f32>()
+            / 400.0;
+        assert!((mean - 0.5).abs() < 0.05, "{}", mean);
     }
 
     #[test]

@@ -231,6 +231,12 @@ pub extern "C" fn world_populate(species: u32, count: u32) -> u32 {
     }
 }
 
+/// Compétence comportementale moyenne d'une espèce, 0..1 (0,5 = hasard) — voir `brain::competence`.
+#[no_mangle]
+pub extern "C" fn stats_competence(species: u32) -> f32 {
+    unsafe { life::mean_competence(&*core::ptr::addr_of!(CREATURES), species as u8) }
+}
+
 #[no_mangle]
 pub extern "C" fn creature_kill(i: u32) {
     unsafe { (*core::ptr::addr_of_mut!(CREATURES)).kill(i as usize) }

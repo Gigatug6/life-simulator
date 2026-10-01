@@ -135,6 +135,18 @@ pub fn mean_hidden(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
+/// Compétence moyenne (voir `brain::competence`) d'une espèce.
+pub fn mean_competence(c: &Creatures, species: u8) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0u32);
+    for i in 0..c.count {
+        if c.species[i] == species {
+            sum += brain::competence(&c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN]);
+            n += 1;
+        }
+    }
+    if n == 0 { 0.0 } else { sum / n as f32 }
+}
+
 /// Avance d'un tick. `grid` est reconstruite ici.
 pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut Rng) {
     let n = c.count;
@@ -392,6 +404,40 @@ mod tests {
         run(&mut s, 1);
         assert_eq!(count_species(&s.c, HERBIVORE), 0, "la proie est tuée");
         assert!(s.c.energy[0] > 40.0, "le prédateur gagne de l'énergie : {}", s.c.energy[0]);
+    }
+
+    #[test]
+    #[ignore] // diagnostic : cargo test intelligence_report -- --ignored --nocapture
+    fn intelligence_report() {
+        let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        let ticks: u32 = std::env::var("TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(20_000);
+        let mut s = sim(3, 300);
+        add_carnivores(&mut s, nc);
+        let step = ticks / 20;
+        for chunk in 0..20 {
+            run_from(&mut s, chunk * step, step);
+            let n = s.c.count;
+            // âge moyen des vieux : compétence des créatures de plus de 1000 ticks vs ensemble
+            let (mut old, mut oldn) = (0.0f32, 0u32);
+            for i in 0..n {
+                if s.c.age[i] > 1000 {
+                    old += brain::competence(&s.c.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN]);
+                    oldn += 1;
+                }
+            }
+            let maxgen = (0..n).map(|i| s.c.generation[i]).max().unwrap_or(0);
+            println!(
+                "t={:6} herb={:5} carn={:4} hid={:.2} comp_h={:.3} comp_c={:.3} comp_vieux={:.3} gen_max={}",
+                (chunk + 1) * step,
+                count_species(&s.c, HERBIVORE),
+                count_species(&s.c, CARNIVORE),
+                mean_hidden(&s.c, HERBIVORE),
+                mean_competence(&s.c, HERBIVORE),
+                mean_competence(&s.c, CARNIVORE),
+                if oldn > 0 { old / oldn as f32 } else { 0.0 },
+                maxgen
+            );
+        }
     }
 
     #[test]

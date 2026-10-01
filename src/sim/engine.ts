@@ -36,6 +36,7 @@ export interface LifeExports {
   world_populate(species: number, count: number): number
   stats_count(species: number): number
   stats_mean_hidden(species: number): number
+  stats_competence(species: number): number
   rng_lo(): number
   rng_hi(): number
   rng_restore(lo: number, hi: number): void

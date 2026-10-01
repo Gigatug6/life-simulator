@@ -80,5 +80,9 @@ describe.runIf(existsSync(wasmPath))('moteur WASM', () => {
     expect(e.stats_count(1)).toBe(1)
     expect(e.stats_mean_hidden(0)).toBe(4)
     expect(e.stats_mean_hidden(1)).toBe(4)
+    // cerveaux aléatoires : compétence proche de 0,5 (hasard) ; 0 si l'espèce est absente
+    expect(Math.abs(e.stats_competence(0) - 0.5)).toBeLessThan(0.2)
+    e.world_init(2, 64, 64)
+    expect(e.stats_competence(1)).toBe(0)
   })
 })
