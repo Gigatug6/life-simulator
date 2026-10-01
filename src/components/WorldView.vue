@@ -18,6 +18,7 @@ watch(() => world.frame, (f) => {
   if (!f || !renderer) return
   if (f.grass) renderer.setGrass(f.grass)
   renderer.setDaylight(f.daylight)
+  renderer.setCreatures(f)
 })
 </script>
 

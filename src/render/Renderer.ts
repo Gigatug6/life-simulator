@@ -1,6 +1,10 @@
 import * as THREE from 'three'
 import { ViewState } from './view'
 import { terrainColor } from './terrainColor'
+import { writeInstances } from './instances'
+import type { Frame } from '../sim/protocol'
+
+const MAX_CREATURES = 20000 // miroir de creatures::MAX
 
 /** Rendu 2D vue du ciel. Aucune dépendance à Vue : les données entrent par des méthodes. */
 export class Renderer {
@@ -14,6 +18,9 @@ export class Renderer {
   private biome: Uint8Array | null = null
   private w = 0
   private h = 0
+  private creatures: THREE.InstancedMesh
+  private lastFrame: Frame | null = null
+  private uploadedZoom = 0
   private raf = 0
   private dirty = true
   private pointers = new Map<number, { x: number; y: number }>()
@@ -24,6 +31,15 @@ export class Renderer {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     this.scene.background = new THREE.Color(0x070d0a)
+    const tri = new THREE.BufferGeometry()
+    tri.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0.6, 0, 0, -0.4, 0.35, 0, -0.4, -0.35, 0]), 3))
+    this.creatures = new THREE.InstancedMesh(tri, new THREE.MeshBasicMaterial(), MAX_CREATURES)
+    this.creatures.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    this.creatures.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_CREATURES * 3), 3)
+    this.creatures.instanceColor.setUsage(THREE.DynamicDrawUsage)
+    this.creatures.frustumCulled = false
+    this.creatures.count = 0
+    this.scene.add(this.creatures)
     this.bindInput()
     this.resize()
     const loop = () => {
@@ -71,6 +87,25 @@ export class Renderer {
     this.dirty = true
   }
 
+  /** Met à jour les créatures depuis une image de simulation. */
+  setCreatures(frame: Frame) {
+    this.lastFrame = frame
+    this.uploadCreatures()
+  }
+
+  private uploadCreatures() {
+    const f = this.lastFrame
+    if (!f) return
+    const n = Math.min(f.count, MAX_CREATURES)
+    writeInstances(n, f.x, f.y, f.angle, f.energy, f.species, this.view.zoom,
+      this.creatures.instanceMatrix.array as Float32Array, this.creatures.instanceColor!.array as Float32Array)
+    this.creatures.count = n
+    this.creatures.instanceMatrix.needsUpdate = true
+    this.creatures.instanceColor!.needsUpdate = true
+    this.uploadedZoom = this.view.zoom
+    this.dirty = true
+  }
+
   /** Jour/nuit : assombrit le terrain (0 = nuit, 1 = plein jour). */
   setDaylight(d: number) {
     this.terrainMat?.color.setScalar(0.4 + 0.6 * d)
@@ -92,6 +127,7 @@ export class Renderer {
   }
 
   private draw() {
+    if (this.lastFrame && Math.abs(this.view.zoom - this.uploadedZoom) > 1e-6) this.uploadCreatures()
     const v = this.view
     const hw = v.vw / 2 / v.zoom
     const hh = v.vh / 2 / v.zoom
@@ -174,6 +210,10 @@ export class Renderer {
     cancelAnimationFrame(this.raf)
     this.cleanup.forEach((f) => f())
     this.disposeTerrain()
+    this.scene.remove(this.creatures)
+    this.creatures.geometry.dispose()
+    ;(this.creatures.material as THREE.Material).dispose()
+    this.creatures.dispose()
     this.renderer.dispose()
   }
 }
