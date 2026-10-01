@@ -15,7 +15,8 @@ const EAT_BITE: f32 = 0.25;
 const EAT_GAIN: f32 = 35.0;
 const BIRTH_THRESHOLD: f32 = 80.0;
 const BIRTH_COST: f32 = 45.0;
-const CHILD_ENERGY: f32 = 35.0;
+const CHILD_ENERGY: f32 = 25.0; // < BIRTH_COST : naître coûte de l'énergie (pas de création gratuite)
+const MATURITY: u32 = 300; // âge minimal pour se reproduire
 const MUT_RATE: f32 = 0.08;
 const MUT_SIGMA: f32 = 0.15;
 const LOOK: f32 = 3.0; // distance des capteurs
@@ -170,7 +171,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         }
 
         // --- reproduction ---
-        if out[3] > 0.0 && c.energy[i] > BIRTH_THRESHOLD && c.count < crate::creatures::MAX {
+        if out[3] > 0.0 && c.age[i] >= MATURITY && c.energy[i] > BIRTH_THRESHOLD && c.count < crate::creatures::MAX {
             c.energy[i] -= BIRTH_COST;
             let mut child = [0.0f32; GENOME_LEN];
             brain::mutate(&mut child, &c.genome[g..g + GENOME_LEN], rng, MUT_RATE, MUT_SIGMA);
@@ -294,7 +295,7 @@ mod tests {
             max = max.max(s.c.count);
         }
         assert!(min > 0, "extinction");
-        assert!(max < crate::creatures::MAX / 2, "saturation : {}", max);
+        assert!(max < 2500, "boom démographique : {}", max);
     }
 
     #[test]

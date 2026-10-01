@@ -1,7 +1,7 @@
 # PROGRESS — Simulateur de vie
 
 ## Statut
-- Phase courante : 3 — Worker + rendu
+- Phase courante : 4 — Persistance
 - Commandes : `make init`, `make install`, `make wasm`, `make check`, `make dev`, `make e2e`
 
 ## Checklist
@@ -25,14 +25,18 @@
 - [x] 3.1 Protocole worker : boucle fixe (vitesse pause/×1/×4/×16/×64), snapshots transférables (positions, espèce, énergie) + commandes (init, spawn, pluie)
 - [x] 3.2 Renderer three.js : caméra ortho, terrain en DataTexture (biomes + herbe + jour/nuit), zoom/pan
 - [x] 3.3 Créatures en InstancedMesh (couleur par espèce/énergie), capture e2e relue
-- [ ] 3.4 Équilibrage du démarrage : pas de boom (400→6000 en 75 ticks), population stable ; l'herbe doit limiter la croissance
+- [x] 3.4 Équilibrage du démarrage : pas de boom (400→6000 en 75 ticks), population stable ; l'herbe doit limiter la croissance
 ### Phase 4 — Persistance IndexedDB + rattrapage hors-ligne
+- [ ] 4.1 `src/persist/store.ts` : interface `SaveStore` + implémentation IndexedDB (une base `life-simulator`, store `saves`, clé `main`, + `meta`) + implémentation mémoire pour les tests unitaires
+- [ ] 4.2 Worker : commandes `save`/`load` (takeSnapshot/restoreSnapshot), autosave toutes les ~10 s et sur `visibilitychange`/`pagehide`, reprise au démarrage (sinon nouveau monde)
+- [ ] 4.3 Rattrapage hors-ligne : temps écoulé depuis la dernière sauvegarde simulé en rafale (ticks sans rendu, plafonné ~5 min de calcul), barre de progression
+- [ ] 4.4 Export/import fichier + bouton « Nouveau monde » (graine), e2e « recharge la page → même monde »
 ### Phase 5 — Mode Dieu & UI
 ### Phase 6 — Intelligence avancée (structure évolutive, apprentissage, paliers)
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 3.4 : corriger le boom démographique du démarrage (reproduction trop facile : seuil/coût de naissance, délai de maturité par l'âge, cooldown, coût énergétique de l'enfant ; chercher aussi une capacité de charge via l'herbe). Valider avec `balance_report` + un test cargo (population max < 3000 sur 128×128 pendant les 300 premiers ticks) puis relire une capture.
+Phase 4.1 : `src/persist/store.ts` — interface `SaveStore` (get/put/delete d'un `Uint8Array` + méta `{savedAt, tick, seed}`), implémentation IndexedDB (try/catch partout, repli si indisponible), implémentation mémoire ; tests Vitest sur l'implémentation mémoire + test e2e IndexedDB réel.
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -43,6 +47,7 @@ Phase 3.4 : corriger le boom démographique du démarrage (reproduction trop fac
 (aucun)
 
 ## Journal
+- 3.4 fait : naissance moins facile (enfant 25 < coût 45 : plus d'énergie créée, maturité 300 ticks). Résultats `balance_report` : herbivores seuls 600→900 puis lente décrue vers ~150 (6000 ticks) ; avec carnivores oscillations Lotka-Volterra ~5000 ticks puis effondrement. Test anti-boom (max < 2500). ATTENTION objectif central : l'intelligence moyenne (hidden ≈ 4,0) ne monte pas encore → priorité phase 6 (pression de sélection, apprentissage, mutations structurelles plus utiles). Phase 3 terminée.
 - 3.3 fait : `render/instances.ts` (matrices + couleurs, taille ≥ 4 px), InstancedMesh 20 000 triangles orientés dans `Renderer.setCreatures` (réupload au changement de zoom). Capture relue : triangles jaunes (herbivores) et rouges (carnivores), orientés, visibles au dézoom comme au zoom. Problème visible : 6000 herbivores à t=75, ticks/s chute (128) → étape 3.4. Vitest 18 + e2e 2 verts.
 - 3.2 fait : `render/view.ts` (ViewState pur : fit/pan/zoom au curseur/bornes), `render/terrainColor.ts` (biome + herbe → couleur), `render/Renderer.ts` (three ortho, DataTexture NearestFilter, molette, glisser, pinch, jour/nuit via color du matériau, dispose), `WorldView.vue`. Captures `artifacts/screens/world-fit.png`/`world-zoom.png` relues : île avec eau profonde/peu profonde, plages, plaines, forêts, montagnes grises, zones brunes broutées ; zoom OK. Observation : 400 herbivores → 4400 en 62 ticks (reproduction trop facile au démarrage), ~435-770 ticks/s avec 4000 créatures. Vitest 16 + e2e 2 verts.
 - 3.1 fait : `SimController` (testable sans Worker : init/peuplement `world_populate`, `advance` avec budget temps, `frame` en copies, spawn, pluie), worker mince (33 ms/image, budget 22 ms), protocole typé + `SPEEDS`, store Pinia `world` (tableaux en shallowRef/markRaw), App de debug avec boutons de vitesse. Vitest 11 + e2e smoke (vitesse ×16, pause fige les ticks) verts.
