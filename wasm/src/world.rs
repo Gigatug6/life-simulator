@@ -1,4 +1,4 @@
-//! Grille du monde : altitude (bruit de valeurs multi-octaves) -> biomes.
+//! World grid: altitude (multi-octave value noise) -> biomes.
 use crate::rng::hash2;
 
 pub const MAX_W: usize = 512;
@@ -15,7 +15,7 @@ fn smooth(t: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// Bruit de valeurs 2D lissé, coordonnées positives.
+/// Smoothed 2D value noise, positive coordinates.
 fn value_noise(seed: u32, x: f32, y: f32) -> f32 {
     let (xi, yi) = (x as i32, y as i32);
     let (fx, fy) = (smooth(x - xi as f32), smooth(y - yi as f32));
@@ -44,7 +44,7 @@ pub fn biome_of(altitude: f32, moisture: f32) -> u8 {
     }
 }
 
-/// Remplit `altitude` et `biome` (taille w*h). Déterministe pour une graine donnée.
+/// Fills `altitude` and `biome` (size w*h). Deterministic for a given seed.
 pub fn generate(altitude: &mut [f32], biome: &mut [u8], w: usize, h: usize, seed: u32) {
     for y in 0..h {
         for x in 0..w {
@@ -58,7 +58,7 @@ pub fn generate(altitude: &mut [f32], biome: &mut [u8], w: usize, h: usize, seed
                 freq *= 2.0;
             }
             alt /= norm;
-            // île : abaisse les bords pour entourer le monde d'eau
+            // island: lowers the edges so the world is surrounded by water
             let (dx, dy) = (fx - 0.5, fy - 0.5);
             let edge = (dx * dx + dy * dy) * 2.2;
             alt = (alt * 1.25 - edge * 0.5).clamp(0.0, 1.0);
@@ -91,9 +91,9 @@ mod tests {
         let (a, b) = gen(11);
         assert!(a.iter().all(|v| (0.0..=1.0).contains(v)));
         for biome in [DEEP_WATER, BEACH, PLAIN] {
-            assert!(b.contains(&biome), "biome {} absent", biome);
+            assert!(b.contains(&biome), "biome {} missing", biome);
         }
-        // les bords sont de l'eau (monde en île)
+        // the edges are water (island world)
         assert_eq!(b[0], DEEP_WATER);
     }
 }

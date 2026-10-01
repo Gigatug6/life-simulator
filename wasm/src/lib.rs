@@ -1,5 +1,5 @@
-//! Moteur de simulation de vie (WebAssembly, sans std, sans crate externe).
-//! Phase 0 : « hello » — vérifie la chaîne Docker -> wasm -> worker.
+//! Life simulation engine (WebAssembly, no std, no external crate).
+//! Exports a C ABI: the host (TypeScript) reads the data through raw pointers into linear memory.
 #![cfg_attr(target_arch = "wasm32", no_std)]
 
 #[cfg(target_arch = "wasm32")]
@@ -19,13 +19,13 @@ pub mod world;
 
 static mut TICKS: u32 = 0;
 
-/// Version du protocole du moteur (incrémentée si le format mémoire change).
+/// Engine protocol version (incremented when the memory layout changes).
 #[no_mangle]
 pub extern "C" fn version() -> u32 {
     1
 }
 
-/// Avance la simulation d'un tick et renvoie le compteur total.
+/// Advances the simulation by one tick and returns the total tick counter.
 #[no_mangle]
 pub extern "C" fn tick() -> u32 {
     unsafe {
@@ -48,7 +48,7 @@ pub extern "C" fn tick() -> u32 {
                 life::step(c, &mut *core::ptr::addr_of_mut!(GRID), &mut env, rng);
             }
             life::maintain(c, &mut *core::ptr::addr_of_mut!(ELITES), &env, rng, TICKS);
-            RAIN *= 0.999; // la pluie s'estompe lentement
+            RAIN *= 0.999; // rain fades slowly
         }
         TICKS
     }
@@ -71,7 +71,7 @@ static mut BIOME: [u8; world::MAX_W * world::MAX_H] = [0; world::MAX_W * world::
 static mut WIDTH: u32 = 0;
 static mut HEIGHT: u32 = 0;
 
-/// Génère le monde (w, h <= 512). Renvoie 0 si OK, 1 si dimensions invalides.
+/// Generates the world (w, h <= 512). Returns 0 if OK, 1 if the dimensions are invalid.
 #[no_mangle]
 pub extern "C" fn world_init(seed: u32, w: u32, h: u32) -> u32 {
     if w == 0 || h == 0 || w as usize > world::MAX_W || h as usize > world::MAX_H {
@@ -82,7 +82,7 @@ pub extern "C" fn world_init(seed: u32, w: u32, h: u32) -> u32 {
         let alt = &mut *core::ptr::addr_of_mut!(ALTITUDE);
         let bio = &mut *core::ptr::addr_of_mut!(BIOME);
         world::generate(&mut alt[..n], &mut bio[..n], w as usize, h as usize, seed);
-        // herbe initiale : la moitié de la capacité du biome
+        // initial grass: half the biome capacity
         let grass = &mut *core::ptr::addr_of_mut!(GRASS);
         for i in 0..n {
             grass[i] = plants::capacity(bio[i]) * 0.5;
@@ -109,13 +109,13 @@ pub extern "C" fn world_height() -> u32 {
     unsafe { HEIGHT }
 }
 
-/// Pointeur (offset mémoire WASM) vers les altitudes f32 (w*h).
+/// Pointer (WASM memory offset) to the f32 altitudes (w*h).
 #[no_mangle]
 pub extern "C" fn world_altitude_ptr() -> *const f32 {
     core::ptr::addr_of!(ALTITUDE) as *const f32
 }
 
-/// Pointeur vers les biomes u8 (w*h).
+/// Pointer to the u8 biomes (w*h).
 #[no_mangle]
 pub extern "C" fn world_biome_ptr() -> *const u8 {
     core::ptr::addr_of!(BIOME) as *const u8
@@ -136,8 +136,8 @@ pub extern "C" fn world_rain() -> f32 {
     unsafe { RAIN }
 }
 
-/// Restaure les méta-données après que l'hôte a recopié altitude/biome/herbe dans la mémoire.
-/// Renvoie 0 si OK, 1 si dimensions invalides.
+/// Restores the metadata after the host has copied altitude/biome/grass into memory.
+/// Returns 0 if OK, 1 if the dimensions are invalid.
 #[no_mangle]
 pub extern "C" fn world_restore(seed: u32, w: u32, h: u32, tick: u32, rain: f32) -> u32 {
     if w == 0 || h == 0 || w as usize > world::MAX_W || h as usize > world::MAX_H {
@@ -153,7 +153,7 @@ pub extern "C" fn world_restore(seed: u32, w: u32, h: u32, tick: u32, rain: f32)
     0
 }
 
-/// Crée une créature (espèce 0 herbivore, 1 carnivore) ; renvoie son index ou -1 si plein.
+/// Creates a creature (species 0 herbivore, 1 carnivore); returns its index, or -1 if full.
 #[no_mangle]
 pub extern "C" fn creature_spawn(x: f32, y: f32, species: u32) -> i32 {
     unsafe {
@@ -189,7 +189,7 @@ pub extern "C" fn creature_genome_ptr() -> *const f32 {
     unsafe { core::ptr::addr_of!(CREATURES.genome) as *const f32 }
 }
 
-/// État du générateur aléatoire (pour des snapshots reproductibles).
+/// Random generator state (for reproducible snapshots).
 #[no_mangle]
 pub extern "C" fn rng_lo() -> u32 {
     unsafe { RNG.0 as u32 }
@@ -203,20 +203,20 @@ pub extern "C" fn rng_restore(lo: u32, hi: u32) {
     unsafe { RNG = rng::Rng(((hi as u64) << 32) | lo as u64) }
 }
 
-/// Nombre de créatures d'une espèce (statistiques pour l'UI).
+/// Number of creatures of a species (statistics for the UI).
 #[no_mangle]
 pub extern "C" fn stats_count(species: u32) -> u32 {
     unsafe { life::count_species(&*core::ptr::addr_of!(CREATURES), species as u8) as u32 }
 }
 
-/// Unités cachées moyennes d'une espèce (indice de complexité cérébrale).
+/// Mean hidden units of a species (brain-complexity index).
 #[no_mangle]
 pub extern "C" fn stats_mean_hidden(species: u32) -> f32 {
     unsafe { life::mean_hidden(&*core::ptr::addr_of!(CREATURES), species as u8) }
 }
 
-/// Peuple le monde : `count` créatures de l'espèce donnée sur des cases de terre (plaine et plus).
-/// Renvoie le nombre réellement créé.
+/// Populates the world: `count` creatures of the given species on land cells (plain and above).
+/// Returns the number actually created.
 #[no_mangle]
 pub extern "C" fn world_populate(species: u32, count: u32) -> u32 {
     unsafe {
@@ -246,13 +246,13 @@ pub extern "C" fn world_populate(species: u32, count: u32) -> u32 {
     }
 }
 
-/// Compétence comportementale moyenne d'une espèce, 0..1 (0,5 = hasard) — voir `brain::competence`.
+/// Mean behavioural competence of a species, 0..1 (0.5 = random) — see `brain::competence`.
 #[no_mangle]
 pub extern "C" fn stats_competence(species: u32) -> f32 {
     unsafe { life::mean_competence(&*core::ptr::addr_of!(CREATURES), species as u8) }
 }
 
-/// Renaissances déclenchées depuis le début du monde (l'espèce était presque éteinte).
+/// Rebirths triggered since the world began (the species was almost extinct).
 #[no_mangle]
 pub extern "C" fn world_rescues() -> u32 {
     unsafe { (*core::ptr::addr_of!(ELITES)).rescues }
@@ -278,7 +278,7 @@ pub extern "C" fn elite_slots() -> u32 {
     elite::ELITES as u32
 }
 
-/// Restaure la mémoire des élites après recopie des tableaux par l'hôte.
+/// Restores the elite memory after the host has copied the arrays.
 #[no_mangle]
 pub extern "C" fn elites_restore(count: u32, rescues: u32) -> u32 {
     if count as usize > elite::ELITES {
@@ -304,11 +304,11 @@ pub extern "C" fn creature_count() -> u32 {
 
 #[no_mangle]
 pub extern "C" fn creature_next_id() -> u32 {
-    // prochain identifiant qui sera attribué (format de snapshot inchangé)
+    // next id that will be issued (snapshot format unchanged)
     unsafe { (*core::ptr::addr_of!(CREATURES)).issued.wrapping_add(1) }
 }
 
-/// Restaure le compteur après que l'hôte a recopié les tableaux de créatures.
+/// Restores the counter after the host has copied the creature arrays.
 #[no_mangle]
 pub extern "C" fn creatures_restore(count: u32, next_id: u32) -> u32 {
     if count as usize > creatures::MAX {
@@ -355,31 +355,31 @@ pub extern "C" fn creature_species_ptr() -> *const u8 {
     unsafe { core::ptr::addr_of!(CREATURES.species) as *const u8 }
 }
 
-/// Pointeur vers l'herbe f32 (w*h), valeurs 0..capacité.
+/// Pointer to the f32 grass (w*h), values 0..capacity.
 #[no_mangle]
 pub extern "C" fn world_grass_ptr() -> *const f32 {
     core::ptr::addr_of!(GRASS) as *const f32
 }
 
-/// Saison courante : 0 printemps, 1 été, 2 automne, 3 hiver.
+/// Current season: 0 spring, 1 summer, 2 autumn, 3 winter.
 #[no_mangle]
 pub extern "C" fn world_season() -> u32 {
     unsafe { plants::season(TICKS) }
 }
 
-/// Luminosité 0..1 (jour/nuit).
+/// Daylight 0..1 (day/night).
 #[no_mangle]
 pub extern "C" fn world_daylight() -> f32 {
     unsafe { plants::daylight(TICKS) }
 }
 
-/// Pluie (0..1) ou sécheresse (-1..0) — outil de « Dieu » ; s'estompe lentement.
+/// Rain (0..1) or drought (-1..0) — a "God" tool; fades slowly.
 #[no_mangle]
 pub extern "C" fn world_set_rain(v: f32) {
     unsafe { RAIN = if v < -1.0 { -1.0 } else if v > 1.0 { 1.0 } else { v } }
 }
 
-/// Météorite en (x, y) de rayon r (cellules) : renvoie le nombre de créatures tuées.
+/// Meteor at (x, y) with radius r (cells): returns the number of creatures killed.
 #[no_mangle]
 pub extern "C" fn world_meteor(x: f32, y: f32, r: f32) -> u32 {
     unsafe {
@@ -394,7 +394,7 @@ pub extern "C" fn world_meteor(x: f32, y: f32, r: f32) -> u32 {
     }
 }
 
-/// Bénédiction en (x, y) de rayon r : renvoie le nombre de créatures bénies.
+/// Blessing at (x, y) with radius r: returns the number of creatures blessed.
 #[no_mangle]
 pub extern "C" fn world_bless(x: f32, y: f32, r: f32) -> u32 {
     unsafe {

@@ -1,11 +1,11 @@
-//! Herbe : repousse logistique selon la fertilité du biome, les saisons et la pluie.
+//! Grass: logistic regrowth driven by biome fertility, seasons and rain.
 use crate::world::*;
 
-pub const DAY_LEN: u32 = 600; // ticks par jour
-pub const YEAR_LEN: u32 = DAY_LEN * 12; // ticks par an (4 saisons)
-const STRIDE: u32 = 4; // 1 cellule sur 4 mise à jour par tick (taux ×4)
+pub const DAY_LEN: u32 = 600; // ticks per day
+pub const YEAR_LEN: u32 = DAY_LEN * 12; // ticks per year (4 seasons)
+const STRIDE: u32 = 4; // 1 cell in 4 updated per tick (rate ×4)
 
-/// Capacité maximale d'herbe par biome.
+/// Maximum grass capacity per biome.
 pub fn capacity(biome: u8) -> f32 {
     match biome {
         PLAIN => 1.0,
@@ -16,33 +16,33 @@ pub fn capacity(biome: u8) -> f32 {
     }
 }
 
-/// Onde triangulaire 0..1..0 pour une phase dans [0,1) (pas de sin en no_std).
+/// Triangle wave 0..1..0 for a phase in [0,1) (no sin in no_std).
 pub fn tri(phase: f32) -> f32 {
     let p = phase - (phase as i32) as f32;
     if p < 0.5 { p * 2.0 } else { 2.0 - p * 2.0 }
 }
 
-/// 0 = printemps, 1 = été, 2 = automne, 3 = hiver.
+/// 0 = spring, 1 = summer, 2 = autumn, 3 = winter.
 pub fn season(tick: u32) -> u32 {
     (tick % YEAR_LEN) / (YEAR_LEN / 4)
 }
 
-/// Facteur de croissance saisonnier (0.1 en hiver .. 1.0 en été).
+/// Seasonal growth factor (0.1 in winter .. 1.0 in summer).
 pub fn season_factor(tick: u32) -> f32 {
     let year_phase = (tick % YEAR_LEN) as f32 / YEAR_LEN as f32;
-    // pic au milieu de l'été (phase 0.375), creux en plein hiver
+    // peak in mid-summer (phase 0.375), trough in mid-winter
     let t = tri(year_phase + 0.125);
     0.1 + 0.9 * t
 }
 
-/// Luminosité du jour 0 (nuit) .. 1 (plein jour).
+/// Daylight 0 (night) .. 1 (full day).
 pub fn daylight(tick: u32) -> f32 {
     let p = (tick % DAY_LEN) as f32 / DAY_LEN as f32;
     tri(p)
 }
 
-/// Fait avancer la repousse de l'herbe d'un tick. `rain` dans [-1,1] : positif = pluie
-/// (croissance accélérée), négatif = sécheresse (croissance nulle puis herbe qui meurt).
+/// Advances grass regrowth by one tick. `rain` in [-1,1]: positive = rain
+/// (faster growth), negative = drought (no growth, then the grass dies off).
 pub fn step(grass: &mut [f32], biome: &[u8], n: usize, tick: u32, rain: f32) {
     let boost = 1.0 + 2.0 * rain;
     let rate = 0.004 * STRIDE as f32 * season_factor(tick) * if boost > 0.0 { boost } else { 0.0 };
@@ -104,7 +104,7 @@ mod tests {
         }
         assert!(dry[0] > 0.1 && dry[0] <= 1.0);
         assert!(wet[0] > dry[0]);
-        assert_eq!(dry[2], 0.0); // pas d'herbe dans l'eau
+        assert_eq!(dry[2], 0.0); // no grass on water
         assert!(dry[1] <= 0.8 && dry[3] <= 0.15);
     }
 }

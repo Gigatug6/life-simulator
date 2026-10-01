@@ -1,4 +1,4 @@
-//! Stockage SoA des créatures (tableaux denses, suppression par échange avec le dernier).
+//! SoA storage for creatures (dense arrays, removal by swapping with the last one).
 use crate::brain::{GENOME_LEN, LEARN_LEN};
 
 pub const MAX: usize = 20_000;
@@ -8,8 +8,8 @@ pub const CARNIVORE: u8 = 1;
 
 pub struct Creatures {
     pub count: usize,
-    /// Nombre d'identifiants déjà attribués (0 au départ : toute la structure est nulle, donc hors du
-    /// fichier .wasm — un champ non nul ferait embarquer ~19 Mo de zéros dans l'exécutable).
+    /// Number of ids already issued (0 at start: the whole struct is zero, so it stays out of the
+    /// .wasm file — a non-zero field would embed ~19 MB of zeros in the binary).
     pub issued: u32,
     pub x: [f32; MAX],
     pub y: [f32; MAX],
@@ -19,9 +19,9 @@ pub struct Creatures {
     pub id: [u32; MAX],
     pub generation: [u16; MAX],
     pub species: [u8; MAX],
-    /// Génomes à plat : GENOME_LEN f32 par créature.
+    /// Flat genomes: GENOME_LEN f32 per creature.
     pub genome: [f32; MAX * GENOME_LEN],
-    /// Deltas appris pendant la vie (couche de sortie), LEARN_LEN f32 par créature.
+    /// Deltas learned during life (output layer), LEARN_LEN f32 per creature.
     pub learned: [f32; MAX * LEARN_LEN],
 }
 
@@ -48,7 +48,7 @@ impl Creatures {
         self.issued = 0;
     }
 
-    /// Crée une créature ; renvoie son index, ou None si la population est pleine.
+    /// Creates a creature; returns its index, or None if the population is full.
     pub fn spawn(&mut self, x: f32, y: f32, angle: f32, energy: f32, species: u8, generation: u16, genome: &[f32]) -> Option<usize> {
         if self.count >= MAX {
             return None;
@@ -69,7 +69,7 @@ impl Creatures {
         Some(i)
     }
 
-    /// Supprime la créature `i` : la dernière prend sa place (les index ne sont pas stables, les id si).
+    /// Removes creature `i`: the last one takes its place (indices are not stable, ids are).
     pub fn kill(&mut self, i: usize) {
         if i >= self.count {
             return;
@@ -98,7 +98,7 @@ mod tests {
     const G: [f32; GENOME_LEN] = [0.5; GENOME_LEN];
 
     fn boxed() -> Box<Creatures> {
-        // ~15 Mo : alloué directement sur le tas, jamais sur la pile
+        // ~15 MB: allocated directly on the heap, never on the stack
         let mut b = unsafe { Box::<Creatures>::new_zeroed().assume_init() };
         b.clear();
         b
@@ -126,14 +126,14 @@ mod tests {
         assert_eq!(c.id[0], last_id);
         assert_eq!(c.x[0], 2.0);
         assert_eq!(c.genome[0], 0.5);
-        // l'apprentissage suit la créature échangée
+        // learning follows the swapped creature
         let mut d = boxed();
         d.spawn(0.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
         d.spawn(1.0, 0.0, 0.0, 1.0, HERBIVORE, 0, &G);
-        d.learned[LEARN_LEN] = 0.75; // créature 1
+        d.learned[LEARN_LEN] = 0.75; // creature 1
         d.kill(0);
         assert_eq!(d.learned[0], 0.75);
-        c.kill(10); // hors bornes : ignoré
+        c.kill(10); // out of bounds: ignored
         assert_eq!(c.count, 2);
     }
 

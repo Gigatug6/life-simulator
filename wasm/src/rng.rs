@@ -1,10 +1,10 @@
-//! RNG déterministe xorshift64* (même graine -> même monde, natif et WASM).
+//! Deterministic xorshift64* RNG (same seed -> same world, native and WASM).
 #[derive(Clone, Copy)]
 pub struct Rng(pub u64);
 
 impl Rng {
     pub fn new(seed: u64) -> Self {
-        // splitmix64 pour éviter l'état nul et bien disperser les petites graines
+        // splitmix64 avoids the all-zero state and spreads small seeds well
         let mut z = seed.wrapping_add(0x9E3779B97F4A7C15);
         z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
         z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
@@ -18,13 +18,13 @@ impl Rng {
         self.0 = x;
         (x.wrapping_mul(0x2545F4914F6CDD1D) >> 32) as u32
     }
-    /// Flottant dans [0, 1).
+    /// Float in [0, 1).
     pub fn next_f32(&mut self) -> f32 {
         (self.next_u32() >> 8) as f32 / 16_777_216.0
     }
 }
 
-/// Hachage entier -> [0,1) pour le bruit de valeurs.
+/// Integer hash -> [0,1) for value noise.
 pub fn hash2(seed: u32, x: i32, y: i32) -> f32 {
     let mut h = seed ^ (x as u32).wrapping_mul(0x85EBCA6B) ^ (y as u32).wrapping_mul(0xC2B2AE35);
     h ^= h >> 16;

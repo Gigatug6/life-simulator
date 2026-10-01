@@ -1,7 +1,7 @@
-//! Grille de hachage spatial (tri par comptage) : voisinage en O(n) au lieu de O(n²).
+//! Spatial hash grid (counting sort): O(n) neighbourhood queries instead of O(n²).
 use crate::creatures::MAX;
 
-pub const CELL: f32 = 8.0; // taille d'une case en unités du monde
+pub const CELL: f32 = 8.0; // cell size in world units
 const MAX_COLS: usize = 64; // 512 / 8
 const MAX_CELLS: usize = MAX_COLS * MAX_COLS;
 
@@ -24,7 +24,7 @@ impl SpatialHash {
         (cx.clamp(0, self.cols as i32 - 1) as usize, cy.clamp(0, self.rows as i32 - 1) as usize)
     }
 
-    /// Reconstruit la grille pour `n` points dans un monde `w` × `h` (<= 512).
+    /// Rebuilds the grid for `n` points in a `w` × `h` world (<= 512).
     pub fn build(&mut self, xs: &[f32], ys: &[f32], n: usize, w: usize, h: usize) {
         self.cols = ((w as f32 / CELL) as usize + 1).min(MAX_COLS);
         self.rows = ((h as f32 / CELL) as usize + 1).min(MAX_COLS);
@@ -41,7 +41,7 @@ impl SpatialHash {
         for c in 0..cells {
             self.start[c + 1] += self.start[c];
         }
-        // remplissage : on utilise un curseur par case réutilisant `start` puis on le restaure
+        // fill: reuse `start` as a per-cell cursor, then restore it
         for i in 0..n {
             let c = self.cell_of[i] as usize;
             self.items[self.start[c] as usize] = i as u32;
@@ -53,8 +53,8 @@ impl SpatialHash {
         self.start[0] = 0;
     }
 
-    /// Compte les points à moins de `r` de (x, y), en s'arrêtant dès que `cap` est atteint
-    /// (coût borné même en forte densité).
+    /// Counts the points within `r` of (x, y), stopping as soon as `cap` is reached
+    /// (bounded cost even at high density).
     pub fn count_up_to(&self, xs: &[f32], ys: &[f32], x: f32, y: f32, r: f32, cap: u32) -> u32 {
         if self.cols == 0 {
             return 0;
@@ -81,7 +81,7 @@ impl SpatialHash {
         n
     }
 
-    /// Appelle `f(index, distance²)` pour chaque point à moins de `r` de (x, y).
+    /// Calls `f(index, distance²)` for every point within `r` of (x, y).
     pub fn query<F: FnMut(usize, f32)>(&self, xs: &[f32], ys: &[f32], x: f32, y: f32, r: f32, mut f: F) {
         if self.cols == 0 {
             return;
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn handles_out_of_bounds_and_empty() {
         let mut grid = Box::new(SpatialHash::new());
-        grid.build(&[-5.0, 1000.0], &[-5.0, 1000.0], 2, 64, 64); // clampés dans la grille
+        grid.build(&[-5.0, 1000.0], &[-5.0, 1000.0], 2, 64, 64); // clamped into the grid
         let mut c = 0;
         grid.query(&[-5.0, 1000.0], &[-5.0, 1000.0], 0.0, 0.0, 10.0, |_, _| c += 1);
         assert_eq!(c, 1);

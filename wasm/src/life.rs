@@ -1,4 +1,4 @@
-//! Dynamique des créatures : perception -> cerveau -> action -> métabolisme -> mort/reproduction.
+//! Creature dynamics: perception -> brain -> action -> metabolism -> death/reproduction.
 use crate::brain::{self, GENOME_LEN, IN, LEARN_LEN};
 use crate::creatures::{Creatures, CARNIVORE, HERBIVORE};
 use crate::elite::Elites;
@@ -11,22 +11,22 @@ pub const MAX_SPEED: f32 = 0.6;
 pub const START_ENERGY: f32 = 40.0;
 pub const MAX_ENERGY: f32 = 100.0;
 const BASE_COST: f32 = 0.04;
-const BRAIN_COST: f32 = 0.0008; // par unité cachée : l'intelligence a un prix
+const BRAIN_COST: f32 = 0.0008; // per hidden unit: intelligence has a price
 const EAT_BITE: f32 = 0.25;
-const EAT_COST: f32 = 0.03; // tenter de manger coûte un peu : « manger toujours » n'est plus gratuit
-const EAT_GAIN: f32 = 12.0; // une bouchée = ~3 énergie ≈ 60 ticks de vie : il faut chercher à manger en continu
+const EAT_COST: f32 = 0.03; // trying to eat costs a little: "always eat" is no longer free
+const EAT_GAIN: f32 = 12.0; // one bite = ~3 energy ≈ 60 ticks of life: creatures must keep looking for food
 const BIRTH_THRESHOLD: f32 = 65.0;
 const BIRTH_COST: f32 = 35.0;
-const CHILD_ENERGY: f32 = 20.0; // < BIRTH_COST : naître coûte de l'énergie (pas de création gratuite)
-const MATURITY: u32 = 120; // âge minimal pour se reproduire
+const CHILD_ENERGY: f32 = 20.0; // < BIRTH_COST: being born costs energy (no free creation)
+const MATURITY: u32 = 120; // minimum age to reproduce
 const MUT_RATE: f32 = 0.08;
 const MUT_SIGMA: f32 = 0.15;
-const LOOK: f32 = 3.0; // distance des capteurs
+const LOOK: f32 = 3.0; // sensor distance
 const STRIKE_RANGE: f32 = 1.8;
-const KILL_GAIN: f32 = 0.6; // part de l'énergie de la proie récupérée
+const KILL_GAIN: f32 = 0.6; // share of the prey's energy recovered
 const PI: f32 = 3.1415927;
 
-/// sin approché (pas de libm en no_std), précision ~1e-3.
+/// Approximate sin (no libm in no_std), accuracy ~1e-3.
 pub fn sin(x: f32) -> f32 {
     let two_pi = 2.0 * PI;
     let mut x = x - (x / two_pi) as i32 as f32 * two_pi;
@@ -65,7 +65,7 @@ impl Env<'_> {
             Some(cy * self.w + cx)
         }
     }
-    /// Cellule infranchissable : hors carte ou eau profonde.
+    /// Impassable cell: off the map or deep water.
     fn blocked(&self, x: f32, y: f32) -> bool {
         match self.cell(x, y) {
             None => true,
@@ -74,7 +74,7 @@ impl Env<'_> {
     }
 }
 
-/// Météorite : tue toute créature dans le rayon et brûle l'herbe. Renvoie le nombre de morts.
+/// Meteor: kills every creature in the radius and burns the grass. Returns the number of deaths.
 pub fn meteor(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     let r2 = r * r;
     let mut killed = 0;
@@ -89,7 +89,7 @@ pub fn meteor(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     killed
 }
 
-/// Bénédiction : énergie au maximum et herbe luxuriante dans le rayon. Renvoie le nombre de bénies.
+/// Blessing: maximum energy and lush grass in the radius. Returns the number of blessed creatures.
 pub fn bless(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     let r2 = r * r;
     let mut n = 0;
@@ -104,7 +104,7 @@ pub fn bless(c: &mut Creatures, env: &mut Env, x: f32, y: f32, r: f32) -> u32 {
     n
 }
 
-/// Applique `f` à chaque cellule dont le centre est dans le disque (x, y, r).
+/// Applies `f` to every cell whose centre lies in the disc (x, y, r).
 fn for_cells<F: FnMut(&mut Env, usize)>(env: &mut Env, x: f32, y: f32, r: f32, mut f: F) {
     let x0 = (x - r).max(0.0) as usize;
     let y0 = (y - r).max(0.0) as usize;
@@ -120,12 +120,12 @@ fn for_cells<F: FnMut(&mut Env, usize)>(env: &mut Env, x: f32, y: f32, r: f32, m
     }
 }
 
-/// Nombre de créatures d'une espèce.
+/// Number of creatures of a species.
 pub fn count_species(c: &Creatures, species: u8) -> usize {
     (0..c.count).filter(|&i| c.species[i] == species).count()
 }
 
-/// Nombre moyen d'unités cachées d'une espèce (indice simple de complexité cérébrale).
+/// Mean number of hidden units of a species (simple brain-complexity index).
 pub fn mean_hidden(c: &Creatures, species: u8) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0u32);
     for i in 0..c.count {
@@ -137,7 +137,7 @@ pub fn mean_hidden(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
-/// Compétence moyenne (voir `brain::competence`) d'une espèce.
+/// Mean competence (see `brain::competence`) of a species.
 pub fn mean_competence(c: &Creatures, species: u8) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0u32);
     for i in 0..c.count {
@@ -149,7 +149,7 @@ pub fn mean_competence(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
-/// Compétence moyenne du phénotype (génome + apprentissage de la vie) d'une espèce.
+/// Mean phenotype competence (genome + learning during life) of a species.
 pub fn mean_phenotype_competence(c: &Creatures, species: u8) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0u32);
     for i in 0..c.count {
@@ -161,13 +161,13 @@ pub fn mean_phenotype_competence(c: &Creatures, species: u8) -> f32 {
     if n == 0 { 0.0 } else { sum / n as f32 }
 }
 
-const MIN_HERBIVORES: usize = 12; // en dessous, l'espèce renaît de ses meilleurs ancêtres
-const RESCUE_CHECK: u32 = 500; // une renaissance possible tous les 500 ticks au plus (sinon c'est une réserve de proies sans fin)
-const ELITE_CHECK: u32 = 250; // fréquence de mise à jour de la mémoire des élites (ticks)
+const MIN_HERBIVORES: usize = 12; // below this, the species is reborn from its best ancestors
+const RESCUE_CHECK: u32 = 500; // at most one rebirth every 500 ticks (otherwise it becomes an endless supply of prey)
+const ELITE_CHECK: u32 = 250; // how often the elite memory is updated (ticks)
 const ELITE_MIN_AGE: u32 = 300;
 
-/// Entretien périodique : mémorise le meilleur herbivore adulte, et repeuple si l'espèce s'éteint.
-/// Renvoie le nombre de naissances « par renaissance ».
+/// Periodic upkeep: remembers the best adult herbivore, and repopulates if the species dies out.
+/// Returns the number of "rebirth" births.
 pub fn maintain(c: &mut Creatures, elites: &mut Elites, env: &Env, rng: &mut Rng, tick: u32) -> u32 {
     if tick % ELITE_CHECK == 0 {
         let mut best: Option<(usize, f32)> = None;
@@ -215,7 +215,7 @@ pub fn maintain(c: &mut Creatures, elites: &mut Elites, env: &Env, rng: &mut Rng
     born
 }
 
-/// Avance d'un tick. `grid` est reconstruite ici.
+/// Advances one tick. `grid` is rebuilt here.
 pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut Rng) {
     let n = c.count;
     if n == 0 {
@@ -228,7 +228,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
 
         // --- perception ---
         let mut input = [0.0f32; IN];
-        // entrée 0 : herbe sous les pieds (le biais est déjà porté par chaque neurone)
+        // input 0: grass underfoot (the bias is already carried by each neuron)
         if let Some(cell) = env.cell(x, y) {
             input[0] = env.grass[cell];
         }
@@ -248,12 +248,12 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             }
             input[5 + k] = if env.blocked(sx, sy) { 1.0 } else { 0.0 };
         }
-        // voisins : on arrête de compter à 11 (soi-même + 10), l'entrée est de toute façon plafonnée à 1
+        // neighbours: stop counting at 11 (self + 10), the input is capped at 1 anyway
         let near = grid.count_up_to(&c.x, &c.y, x, y, 6.0, 11);
         input[8] = (near.saturating_sub(1) as f32 / 10.0).min(1.0);
         input[9] = env.daylight;
 
-        // --- décision ---
+        // --- decision ---
         let l = i * LEARN_LEN;
         let (out, hid) = brain::forward_learn(&c.genome[g..g + GENOME_LEN], &c.learned[l..l + LEARN_LEN], &input);
         let speed = (out[0] + 1.0) * 0.5 * MAX_SPEED;
@@ -261,21 +261,21 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
         let (nx, ny) = (x + cos(na) * speed, y + sin(na) * speed);
         c.angle[i] = na;
         let mut moved = 0.0;
-        let mut reward = 0.0f32; // signal d'apprentissage de ce tick
+        let mut reward = 0.0f32; // learning signal for this tick
         if !env.blocked(nx, ny) {
             c.x[i] = nx;
             c.y[i] = ny;
             moved = speed;
         } else {
-            reward -= 0.2; // s'être cogné à l'eau / au bord
+            reward -= 0.2; // bumped into water / the edge
         }
 
-        // --- métabolisme ---
+        // --- metabolism ---
         let nh = brain::hidden_count(&c.genome[g..g + GENOME_LEN]) as f32;
         let base = if c.species[i] == CARNIVORE { BASE_COST * 1.3 } else { BASE_COST };
         c.energy[i] -= base + moved * moved * 0.12 + nh * BRAIN_COST;
 
-        // --- manger (herbivores) ---
+        // --- eating (herbivores) ---
         if out[2] > 0.0 && c.species[i] == HERBIVORE {
             c.energy[i] -= EAT_COST;
             reward -= EAT_COST;
@@ -287,7 +287,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             }
         }
 
-        // --- chasser (carnivores) : frappe la proie vivante la plus proche ---
+        // --- hunting (carnivores): strikes the nearest living prey ---
         if out[2] > 0.0 && c.species[i] == CARNIVORE {
             let mut best: Option<(usize, f32)> = None;
             grid.query(&c.x, &c.y, c.x[i], c.y[i], STRIKE_RANGE, |j, d2| {
@@ -323,7 +323,7 @@ pub fn step(c: &mut Creatures, grid: &mut SpatialHash, env: &mut Env, rng: &mut 
             c.spawn(cx, cy, ang, CHILD_ENERGY, sp, gen, &child);
         }
     }
-    // --- mort (parcours décroissant : le dernier échangé a déjà été traité) ---
+    // --- death (descending pass: the swapped-in last creature was already processed) ---
     for i in (0..n).rev() {
         if c.energy[i] <= 0.0 {
             c.kill(i);
@@ -395,10 +395,10 @@ mod tests {
     #[test]
     fn extinct_species_is_reborn_from_its_best_ancestors() {
         let mut s = sim(3, 300);
-        run(&mut s, 1500); // la mémoire des élites se remplit
+        run(&mut s, 1500); // the elite memory fills up
         assert!(s.elites.count > 0);
         let best = (0..s.elites.count).map(|k| s.elites.score[k]).fold(0.0f32, f32::max);
-        // cataclysme : plus aucune créature
+        // cataclysm: no creature left
         for i in (0..s.c.count).rev() {
             s.c.kill(i);
         }
@@ -408,10 +408,10 @@ mod tests {
         assert_eq!(born as usize, MIN_HERBIVORES);
         assert_eq!(s.c.count, MIN_HERBIVORES);
         assert_eq!(s.elites.rescues, 1);
-        // les renaissants descendent des élites : bien meilleurs que le hasard
+        // the reborn descend from the elites: far better than random
         let comp = mean_competence(&s.c, HERBIVORE);
-        assert!(comp > best - 0.15, "renaissance {} vs meilleure élite {}", comp, best);
-        // pas de renaissance si la population est suffisante
+        assert!(comp > best - 0.15, "rebirth {} vs best elite {}", comp, best);
+        // no rebirth if the population is large enough
         let env = Env { w: W, h: H, biome: &s.biome, grass: &mut s.grass, daylight: 0.5 };
         assert_eq!(maintain(&mut s.c, &mut s.elites, &env, &mut s.rng, 1000), 0);
     }
@@ -465,7 +465,7 @@ mod tests {
         let mut ids = a.c.id[..n].to_vec();
         ids.sort();
         ids.dedup();
-        assert_eq!(ids.len(), n, "ids uniques");
+        assert_eq!(ids.len(), n, "unique ids");
     }
 
     fn add_carnivores(s: &mut Sim, n: usize) {
@@ -494,17 +494,17 @@ mod tests {
             max = max.max(s.c.count);
         }
         assert!(min > 0, "extinction");
-        assert!(max < 2500, "boom démographique : {}", max);
+        assert!(max < 2500, "population boom: {}", max);
     }
 
     #[test]
     fn carnivores_kill_and_gain_energy() {
         let mut s = sim(4, 0);
         let g = [0.0; GENOME_LEN];
-        // un prédateur au cerveau forcé « manger/attaquer » (biais de sortie 2 positif) à côté d'une proie
+        // a predator with a forced "eat/attack" brain (positive output-2 bias) next to a prey
         let mut gp = g;
         gp[brain::GENOME_LEN - 1] = 4.0;
-        let b2 = brain::GENOME_LEN - 1 - brain::OUT; // début de b2
+        let b2 = brain::GENOME_LEN - 1 - brain::OUT; // start of b2
         gp[b2 + 2] = 5.0;
         s.c.spawn(40.5, 40.5, 0.0, 30.0, CARNIVORE, 0, &gp);
         s.c.spawn(41.0, 40.5, 0.0, 40.0, HERBIVORE, 0, &g);
@@ -512,8 +512,8 @@ mod tests {
             *cell = world::PLAIN;
         }
         run(&mut s, 1);
-        assert_eq!(count_species(&s.c, HERBIVORE), 0, "la proie est tuée");
-        assert!(s.c.energy[0] > 40.0, "le prédateur gagne de l'énergie : {}", s.c.energy[0]);
+        assert_eq!(count_species(&s.c, HERBIVORE), 0, "the prey is killed");
+        assert!(s.c.energy[0] > 40.0, "the predator gains energy: {}", s.c.energy[0]);
     }
 
     #[test]
@@ -522,31 +522,31 @@ mod tests {
         add_carnivores(&mut s, 8);
         let start = mean_competence(&s.c, HERBIVORE);
         run(&mut s, 8000);
-        assert!(count_species(&s.c, HERBIVORE) > 0, "les herbivores ont disparu");
+        assert!(count_species(&s.c, HERBIVORE) > 0, "the herbivores disappeared");
         let end = mean_competence(&s.c, HERBIVORE);
-        assert!((start - 0.5).abs() < 0.1, "départ aléatoire : {}", start);
-        assert!(end > 0.58, "l'intelligence doit avoir progressé : {} -> {}", start, end);
+        assert!((start - 0.5).abs() < 0.1, "random start: {}", start);
+        assert!(end > 0.58, "intelligence must have progressed: {} -> {}", start, end);
         assert!(s.c.count < crate::creatures::MAX / 4);
     }
 
     #[test]
-    #[ignore] // performance : cargo test perf_report -- --ignored --nocapture
+    #[ignore] // performance: cargo test perf_report -- --ignored --nocapture
     fn perf_report() {
         for n in [2_000usize, 5_000, 10_000, 20_000] {
             let mut s = sim(9, n);
-            // la population évolue : on mesure sur 200 ticks juste après le peuplement
+            // the population evolves: measured over 200 ticks right after populating
             let t0 = std::time::Instant::now();
             run_from(&mut s, 0, 200);
             let dt = t0.elapsed().as_secs_f64();
             println!(
-                "perf n0={:6} n_fin={:6} -> {:7.0} ticks/s ({:.2} ms/tick, {:.2} us/créature/tick) [natif, opt 3]",
+                "perf n0={:6} n_end={:6} -> {:7.0} ticks/s ({:.2} ms/tick, {:.2} us/creature/tick) [native, opt 3]",
                 n, s.c.count, 200.0 / dt, dt * 1000.0 / 200.0, dt * 1e6 / 200.0 / s.c.count as f64
             );
         }
     }
 
     #[test]
-    #[ignore] // diagnostic : cargo test intelligence_report -- --ignored --nocapture
+    #[ignore] // diagnostic: cargo test intelligence_report -- --ignored --nocapture
     fn intelligence_report() {
         let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
         let ticks: u32 = std::env::var("TICKS").ok().and_then(|v| v.parse().ok()).unwrap_or(20_000);
@@ -556,7 +556,7 @@ mod tests {
         for chunk in 0..20 {
             run_from(&mut s, chunk * step, step);
             let n = s.c.count;
-            // âge moyen des vieux : compétence des créatures de plus de 1000 ticks vs ensemble
+            // old creatures: competence of creatures older than 1000 ticks vs everyone
             let (mut old, mut oldn) = (0.0f32, 0u32);
             for i in 0..n {
                 if s.c.age[i] > 1000 {
@@ -566,7 +566,7 @@ mod tests {
             }
             let maxgen = (0..n).map(|i| s.c.generation[i]).max().unwrap_or(0);
             println!(
-                "t={:6} herb={:5} carn={:4} hid={:.2} comp_h={:.3} phen_h={:.3} comp_c={:.3} comp_vieux={:.3} gen_max={}",
+                "t={:6} herb={:5} carn={:4} hid={:.2} comp_h={:.3} phen_h={:.3} comp_c={:.3} comp_old={:.3} gen_max={}",
                 (chunk + 1) * step,
                 count_species(&s.c, HERBIVORE),
                 count_species(&s.c, CARNIVORE),
@@ -581,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // rapport d'équilibrage : cargo test balance_report -- --ignored --nocapture
+    #[ignore] // balance report: cargo test balance_report -- --ignored --nocapture
     fn balance_report() {
         let mut s = sim(3, 300);
         let nc: usize = std::env::var("CARN").ok().and_then(|v| v.parse().ok()).unwrap_or(30);
@@ -605,7 +605,7 @@ mod tests {
         let before: f32 = s.grass.iter().sum();
         run(&mut s, 50);
         assert!(s.grass.iter().sum::<f32>() < before + 5.0 || s.c.count > 0);
-        // sans herbe du tout : extinction (le métabolisme tue)
+        // no grass at all: extinction (metabolism kills)
         let mut s = sim(8, 100);
         s.grass.iter_mut().for_each(|g| *g = 0.0);
         for _ in 0..1500 {
