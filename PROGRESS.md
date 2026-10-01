@@ -19,7 +19,7 @@
 - [x] 2.2 Spatial hash (grille de voisinage) + test de requête
 - [x] 2.3 Cerveau : MLP feed-forward (poids = génome), entrées (vision herbe/eau/voisins/énergie), sorties (avance, rotation, manger, reproduire)
 - [x] 2.4a Génomes SoA (185 f32/créature), RNG global sérialisé dans le snapshot
-- [ ] 2.4b Dynamique : déplacement, métabolisme, manger l'herbe, mort, reproduction avec mutation, déterminisme
+- [x] 2.4b Dynamique : déplacement, métabolisme, manger l'herbe, mort, reproduction avec mutation, déterminisme
 - [ ] 2.5 Carnivores/prédation + équilibre de base (simulation headless : population ne s'éteint pas)
 ### Phase 3 — Worker + rendu three.js instancié
 ### Phase 4 — Persistance IndexedDB + rattrapage hors-ligne
@@ -28,7 +28,7 @@
 ### Phase 7 — Finitions
 
 ## Prochaine étape
-Phase 2.4b : dynamique dans `tick` — spatial hash branché, vision (entrées du cerveau), déplacement, métabolisme, manger l'herbe, mort, reproduction (`brain::mutate`), déterminisme (test : même graine → mêmes snapshots après N ticks).
+Phase 2.5 : carnivores (prédation : capteurs de proies, attaque/gain d'énergie) + équilibrage par simulation headless (`cargo test` long ou export de stats `stats_*` : population par espèce, hidden moyen). Vérifier que la population herbivore ne sature pas à MAX ni ne s'éteint, régler les constantes de `life.rs`.
 
 ## Décisions
 - Stack identique à potato-cutter (Vue 3, Pinia, Vite 8, TS 5.9, three, Vitest, Playwright, Docker).
@@ -39,6 +39,7 @@ Phase 2.4b : dynamique dans `tick` — spatial hash branché, vision (entrées d
 (aucun)
 
 ## Journal
+- 2.4b fait : life.rs (sin/cos approchés, perception 10 entrées, décision MLP, déplacement bloqué par l'eau profonde, métabolisme avec coût par unité cachée, manger, mort, reproduction mutée), branché dans `tick` avec spatial hash. cargo 23 + Vitest 7 (dont reprise identique après restauration avec créatures). À surveiller en 2.5 : le test de restauration (200 créatures, 300 ticks) prend ~3 s → la population semble gonfler fortement (probable saturation), équilibrage nécessaire.
 - 2.4a fait : génomes stockés dans le SoA (`creature_genome_ptr`, kill copie le génome), RNG global (`rng_lo/hi/restore`) inclus dans le snapshot (section créatures = 16 octets d'en-tête), `GENOME_LEN` miroir TS vérifié par test. Tests Rust : Creatures alloué via `Box::new_zeroed` (15 Mo, pas sur la pile). cargo 20 + Vitest 6 verts.
 - 2.3 fait : brain.rs (MLP 10→≤12→4, tanh de Padé sans exp, génome plat de 185 f32 dont le nombre d'unités cachées est un gène muté ±1 → complexité évolutive, mutation gaussienne Irwin-Hall). cargo 20 verts. Mémoire : 185 f32 × 20 000 créatures ≈ 15 Mo une fois les génomes stockés (2.4a).
 - 2.2 fait : spatial.rs (grille 8×8, tri par comptage, `query` à callback), test contre force brute (3000 points, 50 requêtes) + bords/vide. cargo 16 verts. Pas encore branché dans tick (viendra en 2.4).

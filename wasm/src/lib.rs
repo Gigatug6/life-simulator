@@ -10,6 +10,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 pub mod brain;
 pub mod creatures;
+pub mod life;
 pub mod plants;
 pub mod rng;
 pub mod spatial;
@@ -33,6 +34,17 @@ pub extern "C" fn tick() -> u32 {
             let grass = &mut *core::ptr::addr_of_mut!(GRASS);
             let bio = &*core::ptr::addr_of!(BIOME);
             plants::step(&mut grass[..n], &bio[..n], n, TICKS, RAIN);
+            let c = &mut *core::ptr::addr_of_mut!(CREATURES);
+            if c.count > 0 {
+                let mut env = life::Env {
+                    w: WIDTH as usize,
+                    h: HEIGHT as usize,
+                    biome: &bio[..n],
+                    grass: &mut grass[..n],
+                    daylight: plants::daylight(TICKS),
+                };
+                life::step(c, &mut *core::ptr::addr_of_mut!(GRID), &mut env, &mut *core::ptr::addr_of_mut!(RNG));
+            }
             RAIN *= 0.999; // la pluie s'estompe lentement
         }
         TICKS
@@ -47,6 +59,7 @@ pub extern "C" fn add(a: i32, b: i32) -> i32 {
 static mut ALTITUDE: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
 static mut GRASS: [f32; world::MAX_W * world::MAX_H] = [0.0; world::MAX_W * world::MAX_H];
 static mut CREATURES: creatures::Creatures = creatures::Creatures::new();
+static mut GRID: spatial::SpatialHash = spatial::SpatialHash::new();
 static mut RAIN: f32 = 0.0;
 static mut SEED: u32 = 0;
 static mut RNG: rng::Rng = rng::Rng(1);

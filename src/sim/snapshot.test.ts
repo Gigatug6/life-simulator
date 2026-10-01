@@ -48,4 +48,23 @@ describe.runIf(existsSync(wasmPath))('snapshot du monde', () => {
     const snap = takeSnapshot(e)
     expect(restoreSnapshot(e, snap.subarray(0, snap.length - 1))).toBe(false)
   })
+
+  it('la simulation de créatures reprend à l\'identique après restauration', async () => {
+    const a = await loadEngine(readFileSync(wasmPath))
+    a.world_init(21, 128, 128)
+    let placed = 0
+    for (let k = 0; placed < 200 && k < 5000; k++) {
+      if (a.creature_spawn((k * 37) % 128, (k * 91) % 128, 0) >= 0) placed++
+    }
+    for (let i = 0; i < 150; i++) a.tick()
+    const snap = takeSnapshot(a)
+    const b = await loadEngine(readFileSync(wasmPath))
+    expect(restoreSnapshot(b, snap)).toBe(true)
+    for (let i = 0; i < 150; i++) {
+      a.tick()
+      b.tick()
+    }
+    expect(takeSnapshot(b)).toEqual(takeSnapshot(a))
+    expect(a.creature_count()).toBeGreaterThan(0)
+  })
 })
