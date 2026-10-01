@@ -1,4 +1,10 @@
-.PHONY: init build install dev up down logs check typecheck test wasm wasm-test e2e sh npm clean
+prod:       ## build de production (Caddy) sur http://localhost:8080
+	docker compose --profile prod up -d --build web
+
+e2e-prod:   ## tests e2e sur le build de production
+	./scripts/e2e-prod.sh
+
+.PHONY: prod e2e-prod init build install dev up down logs check typecheck test wasm wasm-test e2e sh npm clean
 
 init:       ## génère .env (UID/GID) et build les images
 	./scripts/init-env.sh

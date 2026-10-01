@@ -52,6 +52,17 @@ services:
       app:
         condition: service_healthy
     command: npx playwright test
+  web:
+    profiles: [prod]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.prod
+    image: life-simulator-prod
+    ports:
+      - "8080:80"
+    networks:
+      default:
+        aliases: [web]
 volumes:
   node_modules:
   cargo_cache:

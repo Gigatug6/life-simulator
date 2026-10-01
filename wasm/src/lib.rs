@@ -304,7 +304,8 @@ pub extern "C" fn creature_count() -> u32 {
 
 #[no_mangle]
 pub extern "C" fn creature_next_id() -> u32 {
-    unsafe { (*core::ptr::addr_of!(CREATURES)).next_id }
+    // prochain identifiant qui sera attribué (format de snapshot inchangé)
+    unsafe { (*core::ptr::addr_of!(CREATURES)).issued.wrapping_add(1) }
 }
 
 /// Restaure le compteur après que l'hôte a recopié les tableaux de créatures.
@@ -316,7 +317,7 @@ pub extern "C" fn creatures_restore(count: u32, next_id: u32) -> u32 {
     unsafe {
         let c = &mut *core::ptr::addr_of_mut!(CREATURES);
         c.count = count as usize;
-        c.next_id = next_id;
+        c.issued = next_id.wrapping_sub(1);
     }
     0
 }

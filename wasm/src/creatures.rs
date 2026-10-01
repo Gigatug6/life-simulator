@@ -8,7 +8,9 @@ pub const CARNIVORE: u8 = 1;
 
 pub struct Creatures {
     pub count: usize,
-    pub next_id: u32,
+    /// Nombre d'identifiants déjà attribués (0 au départ : toute la structure est nulle, donc hors du
+    /// fichier .wasm — un champ non nul ferait embarquer ~19 Mo de zéros dans l'exécutable).
+    pub issued: u32,
     pub x: [f32; MAX],
     pub y: [f32; MAX],
     pub angle: [f32; MAX],
@@ -27,7 +29,7 @@ impl Creatures {
     pub const fn new() -> Self {
         Creatures {
             count: 0,
-            next_id: 1,
+            issued: 0,
             x: [0.0; MAX],
             y: [0.0; MAX],
             angle: [0.0; MAX],
@@ -43,7 +45,7 @@ impl Creatures {
 
     pub fn clear(&mut self) {
         self.count = 0;
-        self.next_id = 1;
+        self.issued = 0;
     }
 
     /// Crée une créature ; renvoie son index, ou None si la population est pleine.
@@ -57,12 +59,12 @@ impl Creatures {
         self.angle[i] = angle;
         self.energy[i] = energy;
         self.age[i] = 0;
-        self.id[i] = self.next_id;
+        self.issued = self.issued.wrapping_add(1);
+        self.id[i] = self.issued;
         self.generation[i] = generation;
         self.species[i] = species;
         self.genome[i * GENOME_LEN..(i + 1) * GENOME_LEN].copy_from_slice(&genome[..GENOME_LEN]);
         self.learned[i * LEARN_LEN..(i + 1) * LEARN_LEN].fill(0.0);
-        self.next_id = self.next_id.wrapping_add(1);
         self.count += 1;
         Some(i)
     }

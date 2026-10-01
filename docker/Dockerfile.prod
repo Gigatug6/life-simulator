@@ -1,0 +1,23 @@
+# Image de production : compile le moteur Rust -> WASM, build Vite, puis serveur statique Caddy.
+# Usage : make prod  (http://localhost:8080) — aucune API, tout reste dans le navigateur.
+FROM rust:1-slim-bookworm AS wasm
+RUN rustup target add wasm32-unknown-unknown
+WORKDIR /w
+COPY wasm ./wasm
+RUN cd wasm && cargo build --release --target wasm32-unknown-unknown
+
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+COPY --from=wasm /w/wasm/target/wasm32-unknown-unknown/release/life_sim.wasm src/sim/wasm/life.wasm
+ARG BASE_PATH=/
+ENV BASE_PATH=$BASE_PATH
+RUN npm run build
+
+FROM caddy:2-alpine
+COPY docker/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv
+EXPOSE 80
+HEALTHCHECK CMD wget -qO- http://localhost/ >/dev/null || exit 1
