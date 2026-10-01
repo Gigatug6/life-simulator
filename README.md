@@ -45,7 +45,7 @@ Autres commandes :
 4. **Mesure** : l'indice d'intelligence est la *compétence comportementale* moyenne (le cerveau tourne-t-il vers la nourriture, avance-t-il vers elle, évite-t-il l'eau, mange-t-il sur l'herbe ?). 0 = hasard, 100 = parfait.
 5. **Renaissance** : si les herbivores s'éteignent presque, l'espèce repart de ses 8 meilleurs ancêtres mémorisés.
 
-Résultats mesurés (monde 128², herbivores seuls, cf. `PROGRESS.md`) : compétence 0,50 (hasard) → ~0,70 en 10 000 ticks. Les **carnivores** sont une pression ponctuelle : ils font monter l'intelligence des herbivores mais ne persistent pas durablement (Dieu peut en ressemer).
+Résultats mesurés (monde 128², herbivores seuls, cf. `suivi/01-simulateur-initial.md`) : compétence 0,50 (hasard) → ~0,70 en 10 000 ticks. Les **carnivores** sont une pression ponctuelle : ils font monter l'intelligence des herbivores mais ne persistent pas durablement (Dieu peut en ressemer).
 
 ## Mettre en ligne sur GitHub Pages
 
@@ -87,4 +87,4 @@ Natif, un tick à 10 000 créatures : ~3 ms (332 ticks/s) ; 20 000 créatures : 
 
 ## Suivi du projet
 
-`PROGRESS.md` contient la checklist, les décisions, le journal détaillé (mesures, bugs trouvés) et les limites connues. `CLAUDE.md` fixe les règles de travail de l'agent. Le plan initial a été rédigé avec Opus 5.5, le code avec Sonnet 5.5.
+Le dossier **`suivi/`** garde l'historique du travail : **un fichier par conversation** (checklist, décisions, journal détaillé avec mesures et bugs trouvés, limites connues), avec un index dans `suivi/README.md`. `CLAUDE.md` fixe les règles de travail de l'agent (dont cette convention de suivi). Le plan initial a été rédigé avec Opus 5.5, le code avec Sonnet 5.5.
