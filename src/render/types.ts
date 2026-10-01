@@ -1,4 +1,5 @@
 import type { Frame } from '../sim/protocol'
+import type { WorldEffect } from './effects'
 
 /** What the UI needs from a world renderer; implemented by the 2D and the 3D renderers. */
 export interface WorldRenderer {
@@ -13,6 +14,12 @@ export interface WorldRenderer {
   setDaylight(d: number): void
   /** Simulation clock in ticks: drives the sun, moon, sky and seasons of the 3D view (ignored in 2D). */
   setClock(tick: number): void
+  /** Rain (positive) or drought (negative) in [-1, 1]: clouds, falling rain, dusty haze in the 3D view. */
+  setWeather(rain: number): void
+  /** A visual event of a "God" power (meteor, blessing, spawn) at a place of the world. */
+  addEffect(effect: WorldEffect): void
+  /** Turns the costly visual effects of the 3D view (bloom, glows, fireflies, rain, trail) on or off. */
+  setEffectsEnabled(on: boolean): void
   setCreatures(frame: Frame): void
   /** Highlights the followed creature (null = none). */
   setSelection(pos: { x: number; y: number } | null): void

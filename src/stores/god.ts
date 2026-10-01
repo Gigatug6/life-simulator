@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useWorldStore } from './world'
+import { METEOR_FALL } from '../render/effects'
 
 export type Tool = 'observe' | 'inspect' | 'herbivore' | 'carnivore' | 'meteor' | 'bless'
 
@@ -27,18 +28,27 @@ export const useGodStore = defineStore('god', () => {
         message.value = world.pick(x, y, Math.max(1.5, 14 / zoom)) ? 'Créature sélectionnée' : 'Aucune créature ici'
         break
       case 'herbivore':
+        world.pushEffect({ kind: 'spawn', x, y, radius: 3, species: 0 })
         world.spawn(x, y, 0, 10)
         message.value = 'Herbivores créés'
         break
       case 'carnivore':
+        world.pushEffect({ kind: 'spawn', x, y, radius: 3, species: 1 })
         world.spawn(x, y, 1, 4)
         message.value = 'Carnivores créés'
         break
-      case 'meteor':
-        world.meteor(x, y, radius.value)
+      case 'meteor': {
+        // the meteor is seen falling first: the engine hit lands when the fireball does
+        const r = radius.value
+        world.pushEffect({ kind: 'meteor', x, y, radius: r })
+        setTimeout(() => world.meteor(x, y, r), METEOR_FALL * 1000)
+        message.value = 'Météorite !'
+        break
+      }
         message.value = 'Météorite !'
         break
       case 'bless':
+        world.pushEffect({ kind: 'bless', x, y, radius: radius.value })
         world.bless(x, y, radius.value)
         message.value = 'Bénédiction accordée'
         break

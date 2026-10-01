@@ -137,6 +137,7 @@ export class SimController {
       tick: e.world_tick(),
       season: e.world_season(),
       daylight: e.world_daylight(),
+      rain: e.world_rain(),
       count: e.creature_count(),
       herbivores: e.stats_count(0),
       carnivores: e.stats_count(1),

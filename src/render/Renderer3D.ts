@@ -9,10 +9,14 @@ import { Ground } from './relief'
 import { terrainColor } from './terrainColor'
 import { writeInstances3d, writeShadows3d } from './instances3d'
 import { carnivoreGeometry, herbivoreGeometry } from './creatureModels'
-import { skyAt } from './sky'
+import { skyAt, type RGB } from './sky'
 import { applySeason, seasonFactors, type SeasonFactors } from './seasons'
 import { Vegetation } from './Vegetation'
 import { Glow } from './Glow'
+import { Rain } from './Rain'
+import { Effects3D } from './Effects3D'
+import { Trail } from './Trail'
+import { weatherLook, type WeatherLook, type WorldEffect } from './effects'
 import { Fireflies } from './Fireflies'
 import { buildLayout } from './vegetationLayout'
 import { SKY_FRAGMENT, SKY_VERTEX, WATER_FRAGMENT, WATER_VERTEX } from './shaders'
@@ -75,6 +79,12 @@ export class Renderer3D implements WorldRenderer {
   private vegetation: Vegetation // trees, grass tufts, rocks
   private glow: Glow // bioluminescence of the creatures that emit light
   private fireflies: Fireflies // drifting lights between the trees at night
+  private rainFx: Rain // falling rain around the camera target
+  private effects: Effects3D // meteor / blessing / spawn effects
+  private trail: Trail // fading trail of the followed creature
+  private weather: WeatherLook = weatherLook(0)
+  private effectsOn = true
+  private lastDraw = performance.now() / 1000
   private composer: EffectComposer // scene -> bloom -> screen
   private bloom: UnrealBloomPass
   private shadows: THREE.InstancedMesh // flat dark discs under the creatures
@@ -111,6 +121,9 @@ export class Renderer3D implements WorldRenderer {
 
     this.vegetation = new Vegetation(this.scene)
     this.glow = new Glow(this.scene)
+    this.rainFx = new Rain(this.scene)
+    this.trail = new Trail(this.scene)
+    this.effects = new Effects3D(this.scene, () => this.ground)
     this.fireflies = new Fireflies(this.scene)
 
     // creatures: one InstancedMesh per species (low-poly bodies with vertex colours for eyes, ears, feet)
@@ -354,6 +367,15 @@ export class Renderer3D implements WorldRenderer {
   setClock(tick: number) {
     this.tick = tick
     const s = skyAt(tick)
+    const look = this.weather
+    // clouds grey the sky and dim the light; a drought turns everything dusty orange (night stays dark)
+    const mixRgb = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+    const lit = 0.2 + 0.8 * s.day
+    const tint = (c: RGB, greyLevel: number): RGB =>
+      mixRgb(mixRgb(c, [greyLevel * lit, greyLevel * lit * 1.06, greyLevel * lit * 1.18], look.grey), [0.88 * lit, 0.58 * lit, 0.36 * lit], look.warm)
+    const horizon = tint(s.horizon, 0.55)
+    const zenith = tint(s.zenith, 0.34)
+    const lightColor = mixRgb(s.lightColor, [1, 0.78, 0.52], look.warm)
     const center = new THREE.Vector3(this.w / 2, 0, this.h / 2)
 
     // the directional light is the sun while it is up, the moon (opposite) otherwise
@@ -361,24 +383,26 @@ export class Renderer3D implements WorldRenderer {
     const dir = new THREE.Vector3(...s.sunDir).multiplyScalar(sunUp ? 1 : -1)
     this.sun.position.copy(center).addScaledVector(dir, 320)
     this.sun.target.position.copy(center)
-    this.sun.color.setRGB(...s.lightColor)
-    this.sun.intensity = s.lightIntensity
+    this.sun.color.setRGB(...lightColor)
+    this.sun.intensity = s.lightIntensity * look.lightScale
     this.hemi.color.setRGB(...s.ambientSky)
     this.hemi.groundColor.setRGB(...s.ambientGround)
-    this.hemi.intensity = s.ambientIntensity
+    this.hemi.intensity = s.ambientIntensity * (1 - 0.12 * look.grey)
 
     ;(this.shadows.material as THREE.MeshBasicMaterial).opacity = 0.1 + 0.3 * s.day // shadows fade at night
     this.skyUniforms.uSunDir.value.set(...s.sunDir)
-    this.skyUniforms.uHorizon.value.setRGB(...s.horizon)
-    this.skyUniforms.uZenith.value.setRGB(...s.zenith)
+    this.skyUniforms.uHorizon.value.setRGB(...horizon)
+    this.skyUniforms.uZenith.value.setRGB(...zenith)
     this.skyUniforms.uDay.value = s.day
     this.skyUniforms.uDusk.value = s.dusk
-    this.fog.color.setRGB(...s.horizon)
+    this.fog.color.setRGB(...horizon)
+    this.fog.near = 260 - 120 * look.grey - 80 * look.warm // the air gets thicker in the rain and in the dust
+    this.fog.far = 800 - 280 * look.grey - 200 * look.warm
 
     this.waterUniforms.uSunDir.value.copy(dir)
-    this.waterUniforms.uLightColor.value.setRGB(...s.lightColor)
-    this.waterUniforms.uHorizon.value.setRGB(...s.horizon)
-    this.waterUniforms.uZenith.value.setRGB(...s.zenith)
+    this.waterUniforms.uLightColor.value.setRGB(...lightColor)
+    this.waterUniforms.uHorizon.value.setRGB(...horizon)
+    this.waterUniforms.uZenith.value.setRGB(...zenith)
     this.waterUniforms.uDay.value = s.day
 
     // seasons: repaint the terrain when the look changed noticeably
@@ -391,8 +415,29 @@ export class Renderer3D implements WorldRenderer {
     }
   }
 
+  /** Rain / drought: updates the clouds, the haze and the falling rain. */
+  setWeather(rain: number) {
+    this.weather = weatherLook(rain)
+    this.rainFx.setAmount(this.effectsOn ? this.weather.rainAmount : 0)
+    this.setClock(this.tick) // re-applies the sky, the fog and the lights with the new weather
+  }
+
+  addEffect(effect: WorldEffect) {
+    this.effects.add(effect)
+  }
+
+  /** Bloom, glows, fireflies, rain and trail are the costly part: they can be turned off. */
+  setEffectsEnabled(on: boolean) {
+    this.effectsOn = on
+    this.glow.visible = on
+    this.fireflies.visible = on
+    this.trail.visible = on
+    this.rainFx.setAmount(on ? this.weather.rainAmount : 0)
+  }
+
   setSelection(pos: { x: number; y: number } | null) {
     this.ringPos = pos
+    this.trail.push(pos, this.ground)
   }
 
   setCreatures(frame: Frame) {
@@ -448,6 +493,10 @@ export class Renderer3D implements WorldRenderer {
   private draw() {
     this.waterUniforms.uTime.value = performance.now() / 1000
     this.fireflies.setTime(performance.now() / 1000)
+    this.rainFx.update(performance.now() / 1000, this.controls.target)
+    const now = performance.now() / 1000
+    this.effects.update(now - this.lastDraw)
+    this.lastDraw = now
     this.vegetation.setDistance(this.camera.position.distanceTo(this.controls.target))
     this.sky.position.copy(this.camera.position)
     // creature size depends on the camera distance: rebuild the instances when it changed noticeably
@@ -460,7 +509,8 @@ export class Renderer3D implements WorldRenderer {
       this.ring.position.set(x, Math.max(this.ground.at(x, y), 0) + 0.6, y)
       this.ring.scale.set(r, 1, r)
     } else this.ring.visible = false
-    this.composer.render()
+    if (this.effectsOn) this.composer.render()
+    else this.renderer.render(this.scene, this.camera)
   }
 
   /** A click (little movement, short press) picks the point of the terrain under the cursor. */
@@ -519,6 +569,9 @@ export class Renderer3D implements WorldRenderer {
     this.vegetation.dispose()
     this.glow.dispose()
     this.fireflies.dispose()
+    this.rainFx.dispose()
+    this.effects.dispose()
+    this.trail.dispose()
     this.composer.dispose()
     for (const m of [...this.bodies, this.shadows]) {
       this.scene.remove(m)

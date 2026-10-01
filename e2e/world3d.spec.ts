@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 
 // a fixed world whose centre (where the 3D camera looks) is land with some forest: the tests do not depend on luck
@@ -229,4 +230,133 @@ test('at night the 3D world glows: fireflies between the trees, bioluminescent c
   for (let i = 0; i < 5; i++) await page.mouse.wheel(0, -600)
   await page.waitForTimeout(1200)
   await page.screenshot({ path: 'artifacts/screens/world3d-night-closeup.png' })
+})
+
+/**
+ * Saves the canvas each time the running effect reaches one of the given effect times (virtual seconds). Effects
+ * advance by frame time (capped), so on the software-WebGL renderer, which draws only a few frames per second,
+ * they play in slow motion and a capture at a given effect time is reliable (unlike a real-time delay).
+ */
+async function grabAtEffectTimes(page: Page, times: number[], pathFor: (i: number) => string) {
+  const urls = await page.getByTestId('world-canvas').evaluate(async (c: HTMLCanvasElement, wanted: number[]) => {
+    const r = (window as unknown as { __lifeRenderer: { effects: { times: number[] } } }).__lifeRenderer
+    const out: string[] = []
+    const start = performance.now()
+    while (out.length < wanted.length && performance.now() - start < 40_000) {
+      const t = r.effects.times[0]
+      if (t !== undefined && t >= wanted[out.length]!) out.push(c.toDataURL('image/png'))
+      else await new Promise((res) => setTimeout(res, 20))
+    }
+    return out
+  }, times)
+  expect(urls.length).toBe(times.length) // every wanted moment was reached before the effect ended
+  urls.forEach((u, i) => writeFileSync(pathFor(i), Buffer.from(u.split(',')[1]!, 'base64')))
+}
+
+/** Collects page errors and console errors (a broken shader only shows up there). */
+function watchErrors(page: Page) {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(String(e)))
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text())
+  })
+  return errors
+}
+
+test('weather is visible in 3D: rain greys and darkens the world, drought turns it dusty', { tag: '@3d' }, async ({ page }) => {
+  const errors = watchErrors(page)
+  await page.goto(SEED_URL)
+  await expect(page.getByTestId('population')).toContainText('herbivores')
+  await page.getByTestId('mode-toggle').click()
+  // daylight first: jump to noon of day 1 (tick 300) so that the weather change is easy to see
+  await page.getByRole('button', { name: 'Pause' }).click()
+  await jumpForward(page, 300 - (await currentTick(page)))
+  const mean = () =>
+    page.getByTestId('world-canvas').evaluate((c: HTMLCanvasElement) => {
+      const g = document.createElement('canvas')
+      g.width = 64
+      g.height = 36
+      const ctx = g.getContext('2d')!
+      ctx.drawImage(c, 0, 0, 64, 36)
+      const d = ctx.getImageData(0, 0, 64, 36).data
+      let r = 0
+      let gr = 0
+      let b = 0
+      let sat = 0
+      for (let i = 0; i < d.length; i += 4) {
+        r += d[i]!
+        gr += d[i + 1]!
+        b += d[i + 2]!
+        sat += (Math.max(d[i]!, d[i + 1]!, d[i + 2]!) - Math.min(d[i]!, d[i + 1]!, d[i + 2]!)) / (Math.max(d[i]!, d[i + 1]!, d[i + 2]!) + 1)
+      }
+      const n = d.length / 4
+      return { r: r / n, g: gr / n, b: b / n, lum: (r + gr + b) / (3 * n), sat: sat / n }
+    })
+  const clear = await mean()
+
+  await page.getByTestId('weather-rain').click()
+  await expect(page.getByTestId('weather')).toContainText('Pluie')
+  await page.waitForTimeout(1500)
+  await page.screenshot({ path: 'artifacts/screens/world3d-rain.png' })
+  const rain = await mean()
+  // measured: saturation 0.358 clear -> 0.308 in rain (the white streaks keep the mean luminance almost unchanged)
+  expect(rain.sat).toBeLessThan(clear.sat * 0.93)
+
+  await page.getByTestId('weather-drought').click()
+  await expect(page.getByTestId('weather')).toContainText('Sécheresse')
+  await page.waitForTimeout(1500)
+  await page.screenshot({ path: 'artifacts/screens/world3d-drought.png' })
+  const dry = await mean()
+  // measured: red/blue 0.81 clear -> 0.95 in a drought (dusty orange)
+  expect(dry.r / dry.b).toBeGreaterThan((clear.r / clear.b) * 1.1)
+
+  await page.getByTestId('weather-clear').click()
+  expect(errors).toEqual([])
+})
+
+test('God powers have visible effects in 3D: a meteor falls and explodes, a blessing shines', { tag: '@3d' }, async ({ page }) => {
+  const errors = watchErrors(page)
+  await page.goto(SEED_URL)
+  await expect(page.getByTestId('population')).toContainText('herbivores')
+  await page.getByTestId('mode-toggle').click()
+  await page.getByRole('button', { name: 'Pause' }).click()
+  await jumpForward(page, 300 - (await currentTick(page))) // daylight
+  const box = (await page.getByTestId('world-canvas').boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height * 0.55
+  const population = async () => Number(/Population : (\d+)/.exec((await page.getByTestId('population').textContent()) ?? '')?.[1])
+
+  await page.getByTestId('tool-bless').click()
+  await page.getByTestId('radius').fill('18')
+  await page.mouse.click(cx, cy)
+  await grabAtEffectTimes(page, [1.2], () => 'artifacts/screens/world3d-bless.png') // the column of light is brightest around 1.2 s
+  await page.waitForTimeout(2500)
+
+  await page.getByTestId('tool-meteor').click()
+  await page.getByTestId('radius').fill('24')
+  const before = await population()
+  await page.mouse.click(cx, cy)
+  // read right away (a screenshot takes a long time under software WebGL and would land after the impact)
+  expect(await population()).toBe(before) // the fireball is still falling: nothing dies before the impact
+  // the meteor lands at effect time 0.7 s: the fall, the flash + shock wave just after, then embers and scorched ground
+  await grabAtEffectTimes(page, [0.35, 0.95, 1.8], (i) => `artifacts/screens/world3d-meteor-${['fall', 'impact', 'embers'][i]}.png`)
+  await expect.poll(population, { timeout: 15_000 }).toBeLessThan(before)
+  expect(errors).toEqual([])
+})
+
+test('visual effects can be turned off, and the choice is remembered', { tag: '@3d' }, async ({ page }) => {
+  const errors = watchErrors(page)
+  await page.goto(SEED_URL)
+  await expect(page.getByTestId('population')).toContainText('herbivores')
+  await page.getByTestId('mode-toggle').click()
+  await expect(page.getByTestId('world-canvas')).toHaveAttribute('data-effects', 'on')
+  await page.getByTestId('menu-toggle').click()
+  await page.getByTestId('effects-toggle').uncheck()
+  await expect(page.getByTestId('world-canvas')).toHaveAttribute('data-effects', 'off')
+  await page.waitForTimeout(800)
+  // still a real picture without the bloom pass
+  expect(await distinctColours(page)).toBeGreaterThan(12)
+  await page.reload()
+  await expect(page.getByTestId('world-canvas')).toHaveAttribute('data-effects', 'off')
+  expect(errors).toEqual([])
 })

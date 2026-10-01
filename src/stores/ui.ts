@@ -23,6 +23,8 @@ export const useUiStore = defineStore('ui', () => {
   /** Which world view is shown: the flat top-down view or the 3D view. */
   const mode = ref<'2d' | '3d'>(readMode())
   const menuOpen = ref(false)
+  /** Costly visual effects of the 3D view (bloom, glows, fireflies, rain, trail). */
+  const effects = ref(read('effects', true))
 
   function toggleCharts() {
     chartsOpen.value = !chartsOpen.value
@@ -42,5 +44,14 @@ export const useUiStore = defineStore('ui', () => {
     }
   }
 
-  return { chartsOpen, menuOpen, mode, toggleCharts, toggleMode }
+  function toggleEffects() {
+    effects.value = !effects.value
+    try {
+      localStorage.setItem('life-simulator:ui:effects', effects.value ? '1' : '0')
+    } catch {
+      /* non-critical preference */
+    }
+  }
+
+  return { chartsOpen, menuOpen, mode, effects, toggleCharts, toggleMode, toggleEffects }
 })

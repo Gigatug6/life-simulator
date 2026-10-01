@@ -34,6 +34,7 @@ function onNewWorld() {
       <span class="chip" data-testid="ticks">Tick : {{ f.tick }} · {{ SEASONS[f.season] }} · {{ f.daylight > 0.5 ? 'jour' : 'nuit' }}</span>
       <span v-if="iq !== null" class="chip" data-testid="iq" title="Compétence comportementale moyenne : 0 = hasard, 100 = parfaite">Intelligence : {{ Math.round(iq) }} · {{ levelOf(iq).name }}</span>
       <span v-if="f.rescues > 0" class="chip" data-testid="rescues" title="Les herbivores étaient presque éteints : l'espèce est repartie de ses meilleurs ancêtres">Renaissances : {{ f.rescues }}</span>
+      <span v-if="Math.abs(f.rain) >= 0.08" class="chip" data-testid="weather">{{ f.rain > 0 ? 'Pluie' : 'Sécheresse' }} {{ Math.round(Math.abs(f.rain) * 100) }} %</span>
       <span class="chip" data-testid="population">Population : {{ f.count }} (herbivores {{ f.herbivores }}, carnivores {{ f.carnivores }})</span>
     </template>
     <span class="speeds" role="group" aria-label="Vitesse">
@@ -57,6 +58,10 @@ function onNewWorld() {
       <label class="btn" role="menuitem">
         Importer
         <input type="file" accept=".life" data-testid="import-input" hidden @change="onImport" />
+      </label>
+      <label class="check" role="menuitem" title="Halo lumineux, lucioles, bioluminescence, pluie et traînée dans la vue 3D : à désactiver sur une petite machine">
+        <input type="checkbox" data-testid="effects-toggle" :checked="ui.effects" @change="ui.toggleEffects()" />
+        Effets visuels (3D)
       </label>
       <button role="menuitem" class="danger" data-testid="new-world" @click="onNewWorld">Nouveau monde</button>
       <p v-if="f" class="small">Cerveau moyen {{ f.hiddenHerbivores.toFixed(1) }} neurones cachés · {{ Math.round(world.ticksPerSecond) }} ticks/s</p>
@@ -84,6 +89,7 @@ button.danger { border-color: #a05a52; color: #ffb4a8; }
 .status { flex-basis: 100%; color: #7f9d86; font-size: 11px; }
 .menu { position: absolute; top: 100%; right: .6rem; z-index: 20; display: flex; flex-direction: column; gap: .35rem; min-width: 220px; padding: .6rem; background: #14201a; border: 1px solid #3b5342; border-radius: 8px; box-shadow: 0 6px 20px #0008; }
 .menu .btn { text-align: center; display: block; }
+.check { display: flex; align-items: center; gap: .5rem; font-size: 13px; color: #d7f0dc; cursor: pointer; }
 .small { margin: 0; font-size: 12px; color: #a9c4af; }
 .banner { margin: 0; padding: .4rem .8rem; background: rgba(7, 13, 10, 0.82); font-size: 13px; }
 .banner.err { color: #ff8a80; }

@@ -183,3 +183,31 @@ export const FIREFLY_FRAGMENT = /* glsl */ `
     gl_FragColor = vec4(vec3(0.78, 1.0, 0.35) * a * 1.6, a);
   }
 `
+
+/** Rain: thin streaks falling in a box that follows the camera target; the intensity thins the drops out. */
+export const RAIN_VERTEX = /* glsl */ `
+  uniform float uTime;
+  uniform float uAmount;
+  uniform vec3 uCenter;
+  uniform float uBox;
+  uniform float uHeight;
+  attribute vec4 aRand;
+  attribute float aEnd; // 0 at the top of a streak, 1 at its bottom
+  varying float vAlpha;
+  void main() {
+    float speed = 42.0 + 22.0 * aRand.w;
+    float y = mod(aRand.y * uHeight - uTime * speed, uHeight);
+    vec3 p = vec3(uCenter.x + (aRand.x - 0.5) * uBox, y, uCenter.z + (aRand.z - 0.5) * uBox);
+    p.y += (1.0 - aEnd) * 2.2; // each streak is 2.2 long, falling head first
+    gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+    float keep = step(fract(aRand.x * 91.7 + aRand.z * 13.3), uAmount); // fraction of the drops that exist
+    vAlpha = keep * (0.12 + 0.3 * uAmount) * (0.4 + 0.6 * aEnd);
+  }
+`
+
+export const RAIN_FRAGMENT = /* glsl */ `
+  varying float vAlpha;
+  void main() {
+    gl_FragColor = vec4(0.72, 0.84, 1.0, vAlpha);
+  }
+`

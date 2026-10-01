@@ -20,14 +20,17 @@ function create() {
   r.onWorldClick = (x, y) => god.apply(x, y, r.pixelsPerCell)
   if (world.terrain) r.setTerrain(world.terrain.w, world.terrain.h, world.terrain.biome, world.terrain.altitude)
   if (world.grass) r.setGrass(world.grass)
+  r.setEffectsEnabled(ui.effects)
   const f = world.frame
   if (f) {
+    r.setWeather(f.rain)
     r.setDaylight(f.daylight)
     r.setClock(f.tick)
     r.setCreatures(f)
     r.setSelection(f.selected ? { x: f.selected.x, y: f.selected.y } : null)
   }
   renderer = r
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__lifeRenderer = r // dev-only handle for debugging / e2e
 }
 
 onMounted(create)
@@ -41,10 +44,13 @@ watch(() => ui.mode, async () => {
   create()
 })
 
+watch(() => ui.effects, (on) => renderer?.setEffectsEnabled(on))
+watch(() => world.lastEffect, (e) => e && renderer?.addEffect(e.effect))
 watch(() => world.terrain, (t) => t && renderer?.setTerrain(t.w, t.h, t.biome, t.altitude))
 watch(() => world.frame, (f) => {
   if (!f || !renderer) return
   if (f.grass) renderer.setGrass(f.grass)
+  renderer.setWeather(f.rain)
   renderer.setDaylight(f.daylight)
   renderer.setClock(f.tick)
   renderer.setCreatures(f)
@@ -53,7 +59,7 @@ watch(() => world.frame, (f) => {
 </script>
 
 <template>
-  <canvas :key="ui.mode" ref="canvas" class="world" :data-mode="ui.mode" data-testid="world-canvas"></canvas>
+  <canvas :key="ui.mode" ref="canvas" class="world"   :data-mode="ui.mode" :data-effects="ui.effects ? 'on' : 'off'" data-testid="world-canvas"></canvas>
 </template>
 
 <style scoped>

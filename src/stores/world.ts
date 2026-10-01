@@ -6,6 +6,7 @@ import { createSaveStore, type SaveStore } from '../persist/store'
 import SimWorker from '../sim/worker?worker'
 import { SPEEDS } from '../sim/protocol'
 import { parseSeed } from '../sim/seed'
+import type { WorldEffect } from '../render/effects'
 import type { Frame, Inspected, FromWorker, Speed, ToWorker } from '../sim/protocol'
 
 /** World state on the UI side. Typed arrays stay out of deep reactivity. */
@@ -26,6 +27,10 @@ export const useWorldStore = defineStore('world', () => {
   const ticksPerSecond = ref(0)
   const frame = shallowRef<Frame | null>(null)
   const terrain = shallowRef<{ w: number; h: number; biome: Uint8Array; altitude: Float32Array } | null>(null)
+  /** Latest visual event of a "God" power; the id changes on every event so that watchers fire even for equal ones. */
+  const lastEffect = shallowRef<{ id: number; effect: WorldEffect } | null>(null)
+  let effectId = 0
+  const pushEffect = (effect: WorldEffect) => (lastEffect.value = { id: ++effectId, effect })
   /** Latest grass layer (the frames only carry it now and then); renderers created later start from it. */
   const grass = shallowRef<Float32Array | null>(null)
   const selectedId = ref<number | null>(null)
@@ -245,7 +250,7 @@ export const useWorldStore = defineStore('world', () => {
   }
 
   return {
-    status, ready, history, speed, ticksPerSecond, frame, terrain, grass, restored, catchup, savedAt, saveError, persistent,
+    status, ready, history, speed, ticksPerSecond, frame, terrain, grass, lastEffect, pushEffect, restored, catchup, savedAt, saveError, persistent,
     selectedId, lastSelected, pick, select,
     start, stop, setSpeed, save, exportFile, importFile, newWorld,
     skipCatchup: () => send({ type: 'skipCatchup' }),

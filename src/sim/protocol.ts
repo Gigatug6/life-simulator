@@ -52,6 +52,8 @@ export interface Frame {
   tick: number
   season: number
   daylight: number
+  /** Rain (positive) or drought (negative), -1..1; fades by itself. */
+  rain: number
   count: number
   herbivores: number
   carnivores: number

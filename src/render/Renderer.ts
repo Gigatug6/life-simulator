@@ -4,6 +4,8 @@ import { terrainColor } from './terrainColor'
 import { writeInstances } from './instances'
 import type { Frame } from '../sim/protocol'
 import type { WorldRenderer } from './types'
+import { METEOR_FALL, clamp01, easeOut, effectDuration, type WorldEffect } from './effects'
+import { lineageRgb } from './creatureColor'
 
 const MAX_CREATURES = 20000 // mirror of creatures::MAX
 
@@ -29,6 +31,7 @@ export class Renderer implements WorldRenderer {
   private pointers = new Map<number, { x: number; y: number }>()
   private pinchDist = 0
   private cleanup: Array<() => void> = []
+  private rings: Array<{ mesh: THREE.Mesh; effect: WorldEffect; start: number }> = []
   private downAt: { x: number; y: number; t: number } | null = null
   /** Called on a click (without dragging) with the world coordinates in cells. */
   onWorldClick: ((x: number, y: number) => void) | null = null
@@ -57,6 +60,10 @@ export class Renderer implements WorldRenderer {
     this.resize()
     const loop = () => {
       this.raf = requestAnimationFrame(loop)
+      if (this.rings.length) {
+        this.tickRings(performance.now() / 1000)
+        this.dirty = true // the shock waves animate: keep drawing while there are some
+      }
       if (this.dirty) {
         this.draw()
         this.dirty = false
@@ -131,6 +138,57 @@ export class Renderer implements WorldRenderer {
 
   /** The 2D view has no sun or seasons: only `setDaylight` matters. */
   setClock(_tick: number) {}
+
+  /** No weather in the flat view. */
+  setWeather(_rain: number) {}
+
+  /** Nothing costly to turn off in the flat view. */
+  setEffectsEnabled(_on: boolean) {}
+
+  /** The "God" events are shown as an expanding ring (orange for a meteor, gold for a blessing, species colour for a spawn). */
+  addEffect(e: WorldEffect) {
+    const color =
+      e.kind === 'meteor' ? new THREE.Color(1, 0.55, 0.15) : e.kind === 'bless' ? new THREE.Color(1, 0.85, 0.35) : new THREE.Color(...lineageRgb(e.species ?? 0, 0.5))
+    const mesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.88, 1, 56),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthTest: false, side: THREE.DoubleSide }),
+    )
+    mesh.position.set(e.x, -e.y, 0.4)
+    mesh.renderOrder = 9
+    this.scene.add(mesh)
+    this.rings.push({ mesh, effect: e, start: performance.now() / 1000 })
+  }
+
+  private tickRings(now: number) {
+    this.rings = this.rings.filter((r) => {
+      const t = now - r.start
+      const e = r.effect
+      let scale = 0
+      let alpha = 0
+      if (e.kind === 'meteor') {
+        const u = clamp01((t - METEOR_FALL) / 0.9) // nothing until the meteor lands
+        scale = e.radius * 1.15 * easeOut(u)
+        alpha = t < METEOR_FALL ? 0 : 0.9 * (1 - clamp01((t - METEOR_FALL) / 1.1))
+      } else if (e.kind === 'bless') {
+        const u = clamp01(t / 1.4)
+        scale = e.radius * (0.4 + 0.7 * easeOut(u))
+        alpha = 0.85 * (1 - u)
+      } else {
+        const u = clamp01(t / effectDuration('spawn'))
+        scale = 1.5 + 3.5 * easeOut(u)
+        alpha = 0.9 * (1 - u)
+      }
+      r.mesh.scale.setScalar(Math.max(scale, 0.01))
+      ;(r.mesh.material as THREE.MeshBasicMaterial).opacity = alpha
+      const alive = t < effectDuration(e.kind)
+      if (!alive) {
+        this.scene.remove(r.mesh)
+        r.mesh.geometry.dispose()
+        ;(r.mesh.material as THREE.Material).dispose()
+      }
+      return alive
+    })
+  }
 
   /** Day/night: darkens the terrain (0 = night, 1 = full day). */
   setDaylight(d: number) {
@@ -252,6 +310,12 @@ export class Renderer implements WorldRenderer {
     cancelAnimationFrame(this.raf)
     this.cleanup.forEach((f) => f())
     this.disposeTerrain()
+    this.rings.forEach((r) => {
+      this.scene.remove(r.mesh)
+      r.mesh.geometry.dispose()
+      ;(r.mesh.material as THREE.Material).dispose()
+    })
+    this.rings = []
     this.scene.remove(this.ring)
     this.ring.geometry.dispose()
     ;(this.ring.material as THREE.Material).dispose()
